@@ -201,10 +201,10 @@ export function RouteJourney({ row }: RouteJourneyProps) {
   const animatedDirectCost = useAnimatedNumber(directCost);
 
   return (
-    <div className="flex h-full w-full flex-col overflow-y-auto px-6 py-4">
+    <div className="flex w-full flex-col px-6 py-4 lg:h-full lg:overflow-y-auto">
       <div className="mb-3 shrink-0 text-[10px] font-semibold uppercase tracking-[0.1em] text-dim">Trade Route Simulator</div>
 
-      <div className="flex shrink-0 items-stretch gap-3">
+      <div className="flex flex-col shrink-0 gap-3 lg:flex-row lg:items-stretch">
         <PointCard
           label="Point A · Base"
           point={row.min}
@@ -215,7 +215,7 @@ export function RouteJourney({ row }: RouteJourneyProps) {
           accent="wheat"
         />
 
-        <div className="flex w-20 shrink-0 flex-col items-center justify-center gap-1">
+        <div className="flex w-full shrink-0 flex-col items-center justify-center gap-1 lg:w-20">
           <div
             className={`flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[11px] font-semibold tabular-nums transition-colors duration-300 ${
               isGain ? 'bg-sage-dim text-sage' : 'bg-rust-dim text-rust'

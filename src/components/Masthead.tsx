@@ -36,9 +36,9 @@ export function Masthead({ date, onDateChange }: MastheadProps) {
   }, []);
 
   return (
-    <header className="flex items-center justify-between border-b border-wheat/10 bg-ink px-4 py-2">
+    <header className="flex flex-wrap items-center justify-between gap-y-2 border-b border-wheat/10 bg-ink px-4 py-2">
       <div className="flex items-center gap-3">
-        <img src={aarhatLogo} alt="Aarhat" className="h-11 w-auto" />
+        <img src={aarhatLogo} alt="Aarhat" className="h-9 w-auto lg:h-11" />
         <span className="font-display text-base font-semibold text-amber">आढत</span>
         <div className="h-6 w-px bg-wheat/15" />
         <div className="flex items-baseline gap-2">
@@ -46,7 +46,7 @@ export function Masthead({ date, onDateChange }: MastheadProps) {
           <span className="font-display text-lg font-bold uppercase tracking-tight text-amber">// Nagpur</span>
         </div>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-end gap-3 gap-y-2">
         <div ref={sourceMenuRef} className="flex items-center gap-1.5">
           <div className="relative">
             <button

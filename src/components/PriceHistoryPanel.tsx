@@ -47,7 +47,7 @@ export function PriceHistoryPanel({ commodityId, onCommodityChange, metric, visi
     : '';
 
   return (
-    <div className="flex h-full w-full flex-col overflow-y-auto px-6 py-4">
+    <div className="flex w-full flex-col px-6 py-4 lg:h-full lg:overflow-y-auto">
       <div className="mb-3 flex shrink-0 items-center justify-between">
         <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-dim">Price History &amp; Trend</div>
         <div className="relative">

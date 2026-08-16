@@ -18,7 +18,7 @@ export function TopOpportunities({ rows, selectedCommodityId, onSelect }: TopOpp
       {top5.length === 0 ? (
         <div className="flex flex-1 items-center text-sm text-dim">No spreads to rank for this day.</div>
       ) : (
-        <div className="grid flex-1 grid-cols-5 gap-2">
+        <div className="flex flex-1 gap-2 overflow-x-auto lg:grid lg:grid-cols-5">
           {top5.map((row, i) => {
             const active = row.commodityId === selectedCommodityId;
             const commodityHi = COMMODITIES.find((c) => c.id === row.commodityId)?.nameHi;
@@ -26,7 +26,7 @@ export function TopOpportunities({ rows, selectedCommodityId, onSelect }: TopOpp
               <button
                 key={`${row.commodityId}-${active}`}
                 onClick={() => onSelect(row)}
-                className={`flex min-w-0 flex-col items-start rounded-sm border px-3 py-2 text-left transition-[background-color,border-color,transform] duration-100 ease-out active:scale-[0.97] active:duration-75 ${
+                className={`flex w-[210px] shrink-0 flex-col items-start rounded-sm border px-3 py-2 text-left transition-[background-color,border-color,transform] duration-100 ease-out active:scale-[0.97] active:duration-75 lg:w-auto lg:min-w-0 ${
                   active ? 'animate-kpi-select border-wheat/25 bg-surface2' : 'border-wheat/8 bg-surface hover:border-amber/30 hover:bg-surface2'
                 }`}
               >

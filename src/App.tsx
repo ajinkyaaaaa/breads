@@ -46,7 +46,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-ink font-sans text-wheat">
+    <div className="flex min-h-screen w-full flex-col overflow-x-hidden bg-ink font-sans text-wheat lg:h-screen lg:w-screen lg:overflow-hidden">
       <Masthead date={date} onDateChange={setDate} />
       <StatStrip stats={stats} onSelectBest={handleSelectBest} isBestSelected={rows[0]?.commodityId === selectedCommodityId} />
 
@@ -64,15 +64,15 @@ export default function App() {
         onToggleAllMandis={toggleAllMandis}
       />
 
-      <div className="grid min-h-0 flex-1 grid-cols-2">
-        <div className="min-h-0 border-r border-wheat/10">
+      <div className="flex flex-col lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-2">
+        <div className="lg:min-h-0 lg:border-r lg:border-wheat/10">
           {activeRow ? (
             <RouteJourney key={activeRow.commodityId} row={activeRow} />
           ) : (
-            <div className="flex h-full items-center justify-center text-sm text-dim">No commodity has a two-mandi spread for this day.</div>
+            <div className="flex h-40 items-center justify-center text-sm text-dim lg:h-full">No commodity has a two-mandi spread for this day.</div>
           )}
         </div>
-        <div className="min-h-0">
+        <div className="border-t border-wheat/10 lg:min-h-0 lg:border-t-0">
           <PriceHistoryPanel commodityId={trendCommodityId} onCommodityChange={setTrendCommodityId} metric={metric} visibleMandiCodes={visibleMandiCodes} />
         </div>
       </div>

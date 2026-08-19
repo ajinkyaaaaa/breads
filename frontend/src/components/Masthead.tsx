@@ -130,17 +130,6 @@ export function Masthead({
             {pendingGeocodeCount} need{pendingGeocodeCount === 1 ? 's' : ''} location
           </button>
         )}
-        <span
-          title={syncedRecently ? 'Data fetched within the last 12 hours' : 'Last fetch was over 12 hours ago — resync for current prices'}
-          className={
-            syncedRecently
-              ? 'animate-neon-flicker rounded-sm border border-[#39FF14]/40 bg-black px-2 py-1 text-[10px] uppercase tracking-wide text-[#39FF14] drop-shadow-[0_0_3px_#39FF14]'
-              : 'rounded-sm border border-dim/30 bg-black px-2 py-1 text-[10px] uppercase tracking-wide text-dim'
-          }
-        >
-          Live
-        </span>
-
         {lastSyncedAt && (
           <span
             className={`hidden text-[10px] sm:inline ${syncedRecently ? 'text-dim' : 'text-rust'}`}
@@ -150,6 +139,15 @@ export function Masthead({
             {syncedRecently ? ' · fetched within last 12h' : ' — over 12h old, refresh for latest'}
           </span>
         )}
+
+        <span
+          title={syncedRecently ? 'Live — data fetched within the last 12 hours' : 'Not live — last fetch was over 12 hours ago'}
+          className={
+            syncedRecently
+              ? 'animate-neon-flicker h-2.5 w-2.5 shrink-0 rounded-full bg-[#39FF14] shadow-[0_0_5px_#39FF14]'
+              : 'h-2.5 w-2.5 shrink-0 rounded-full bg-dim/40'
+          }
+        />
 
         <button
           onClick={onRefresh}

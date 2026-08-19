@@ -1,11 +1,17 @@
 import type { ApiCommodity, ApiHistoryRow, ApiPriceRow } from './api';
-import { haversineKm } from './geo';
 import type { Freshness, Mandi, Metric } from '../data/types';
 
 /** Curated per-commodity lot size isn't sourced from the API (no arrival-quantity field exists) -- used until a commodity gets a curated default_lot_quintals value. */
 const DEFAULT_LOT_QUINTALS = 25;
 
-export function toMandi(market: { id: number; district: string; market_name: string; display_name: string | null; lat: number; lon: number }): Mandi {
+export function toMandi(market: {
+  id: number;
+  district: string;
+  market_name: string;
+  display_name: string | null;
+  lat: number | null;
+  lon: number | null;
+}): Mandi {
   return {
     code: String(market.id),
     name: market.display_name ?? market.market_name,
@@ -115,24 +121,39 @@ export interface SpreadPoint {
   freshness: Freshness;
 }
 
+/** A buy/sell pairing for one commodity: sell is always the single highest
+ * reported price across every candidate market, and it's shared by every
+ * tier -- only the buy side changes. Tier A's buy is the cheapest market,
+ * Tier B the 2nd cheapest, Tier C the 3rd, so spread strictly decreases
+ * A > B > C. Distance between the two plays no part in this -- transport
+ * isn't a constraint, so any market anywhere in the state is a fair pair. */
+export interface TierPair {
+  buy: SpreadPoint;
+  sell: SpreadPoint;
+  spread: number;
+  spreadPct: number;
+  /** Absolute ₹ profit for a full lot (spread × lotQuantity) -- what ranking and the card headline are driven by, not spreadPct. */
+  lotProfit: number;
+}
+
 export interface CommoditySpreadRow {
   commodityId: string;
   commodityName: string;
   commodityNameHi?: string;
   unit: string;
-  /** Every reporting, currently-visible mandi's price, ascending. */
-  points: SpreadPoint[];
-  min: SpreadPoint;
-  max: SpreadPoint;
-  spread: number;
-  spreadPct: number;
-  distanceKm: number;
+  /** 1-3 entries, ordered Tier A/B/C -- fewer than 3 when the commodity doesn't have that many distinct reporting markets. */
+  tiers: TierPair[];
+  /** Tier A's spreadPct -- kept as secondary context (shown as a small % badge), not the ranking driver. */
   profitabilityScore: number;
   lotQuantity: number;
+  /** Always tiers[0].lotProfit -- what commodities are ranked by. */
   lotProfit: number;
 }
 
-/** One row per commodity: the full price spread across every visible, reporting mandi. */
+/** One row per commodity: up to 3 buy-side tiers against a single fixed
+ * sell-side market (the commodity's overall highest reported price).
+ * `requireGeocoded` is the opt-in "Location" filter -- off by default, since
+ * a market missing lat/lon is otherwise just as eligible as any other. */
 export function getCommoditySpreadRows(
   commodities: ReturnType<typeof toCommodity>[],
   mandiByMarketId: Map<string, Mandi>,
@@ -140,6 +161,7 @@ export function getCommoditySpreadRows(
   metric: Metric,
   visibleMandiCodes: Set<string>,
   asOf: string,
+  requireGeocoded: boolean,
 ): CommoditySpreadRow[] {
   const rows: CommoditySpreadRow[] = [];
 
@@ -151,39 +173,47 @@ export function getCommoditySpreadRows(
     for (const [marketId, { price, isFallback, unit, rawPrice, freshness }] of collapsed) {
       const mandi = mandiByMarketId.get(String(marketId));
       if (!mandi || !visibleMandiCodes.has(mandi.code)) continue;
+      if (requireGeocoded && (mandi.lat === null || mandi.lon === null)) continue;
       points.push({ mandi, price, isFallback, unit, rawPrice, freshness });
     }
     points.sort((a, b) => a.price - b.price);
 
     if (points.length < 2) continue;
 
-    const min = points[0];
-    const max = points[points.length - 1];
-    if (max.price <= min.price) continue;
+    const sell = points[points.length - 1];
+    const buyCandidates = points.slice(0, Math.min(3, points.length - 1));
 
-    const spread = max.price - min.price;
-    const spreadPct = (spread / min.price) * 100;
-    const distanceKm = haversineKm(min.mandi, max.mandi);
-    const profitabilityScore = spreadPct / (1 + distanceKm / 50);
+    const tiers: TierPair[] = buyCandidates
+      .map((buy) => {
+        const spread = sell.price - buy.price;
+        return {
+          buy,
+          sell,
+          spread,
+          spreadPct: (spread / buy.price) * 100,
+          lotProfit: spread * commodity.defaultLotQuintals,
+        };
+      })
+      .filter((t) => t.spread > 0);
+
+    if (tiers.length === 0) continue;
 
     rows.push({
       commodityId: commodity.id,
       commodityName: commodity.name,
       commodityNameHi: commodity.nameHi,
       unit: commodity.unit,
-      points,
-      min,
-      max,
-      spread,
-      spreadPct,
-      distanceKm,
-      profitabilityScore,
+      tiers,
+      profitabilityScore: tiers[0].spreadPct,
       lotQuantity: commodity.defaultLotQuintals,
-      lotProfit: spread * commodity.defaultLotQuintals,
+      lotProfit: tiers[0].lotProfit,
     });
   }
 
-  return rows.sort((a, b) => b.profitabilityScore - a.profitabilityScore);
+  // Ranked by absolute ₹ profit for a standard lot, not percentage spread --
+  // a commodity with a small % swing on a high-value base can still beat a
+  // huge % swing on a cheap one if it puts more real rupees in your pocket.
+  return rows.sort((a, b) => b.lotProfit - a.lotProfit);
 }
 
 export interface MarketStats {
@@ -206,11 +236,11 @@ export function getMarketStats(
   totalCommodities: number,
 ): MarketStats {
   const [bestRow] = rows;
-  const avgSpreadPct = rows.length ? rows.reduce((sum, r) => sum + r.spreadPct, 0) / rows.length : undefined;
+  const avgSpreadPct = rows.length ? rows.reduce((sum, r) => sum + r.tiers[0].spreadPct, 0) / rows.length : undefined;
 
   let avgSpreadPctChangeVsPrevDay: number | undefined;
   if (prevDayRows?.length && avgSpreadPct !== undefined) {
-    const prevAvg = prevDayRows.reduce((sum, r) => sum + r.spreadPct, 0) / prevDayRows.length;
+    const prevAvg = prevDayRows.reduce((sum, r) => sum + r.tiers[0].spreadPct, 0) / prevDayRows.length;
     avgSpreadPctChangeVsPrevDay = avgSpreadPct - prevAvg;
   }
 

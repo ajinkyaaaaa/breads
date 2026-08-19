@@ -47,6 +47,11 @@ export default function App() {
   const [metric, setMetric] = useState<Metric>('modal');
   const [priceUnit, setPriceUnit] = useState<PriceUnit>('quintal');
   const [topN, setTopN] = useState(5);
+  // ₹/qtl·km default, grounded in real India road-freight data: ~₹3.6/tonne-km
+  // (~₹0.36/qtl-km) per industry data, escalated for current fuel/toll costs.
+  const [transportRate, setTransportRate] = useState(0.5);
+  const [requireGeocoded, setRequireGeocoded] = useState(false);
+  const [tierByCommodity, setTierByCommodity] = useState<Record<string, number>>({});
   const [visibleMandiCodes, setVisibleMandiCodes] = useState<Set<string>>(new Set());
 
   const [pricesByCommodity, setPricesByCommodity] = useState<Record<string, ApiPriceRow[]>>({});
@@ -61,21 +66,22 @@ export default function App() {
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
-  // Initial load: markets, commodities, the list of dates the archive actually has, and last-sync status.
+  // Initial load: every discovered market (geocoded or not -- location is optional
+  // context now, not a requirement to appear), commodities, the list of dates the
+  // archive actually has, and last-sync status.
   useEffect(() => {
     (async () => {
       try {
-        const [marketRows, pendingRows, commodityRows, dateRows, syncStatus] = await Promise.all([
-          fetchMarkets(false), // only markets with a known lat/lon can drive distance-based features
-          fetchMarkets(true), // newly-discovered markets still needing a location
+        const [marketRows, commodityRows, dateRows, syncStatus] = await Promise.all([
+          fetchMarkets(),
           fetchCommodities(),
           fetchArchiveDates(),
           fetchSyncStatus(),
         ]);
-        const mandiList = marketRows.map((m) => toMandi({ ...m, lat: m.lat!, lon: m.lon! }));
+        const mandiList = marketRows.map(toMandi);
         setMandis(mandiList);
         setVisibleMandiCodes(new Set(mandiList.map((m) => m.code)));
-        setPendingGeocodeCount(pendingRows.length);
+        setPendingGeocodeCount(mandiList.filter((m) => m.lat === null).length);
         setCommodities(commodityRows.map(toCommodity));
         setDates(dateRows);
         setAsOf(dateRows[dateRows.length - 1] ?? null);
@@ -107,15 +113,14 @@ export default function App() {
       // a fast ingest still doesn't shortchange the >=5s overlay requirement.
       await Promise.all([triggerIngest(), new Promise((resolve) => setTimeout(resolve, MIN_SYNC_OVERLAY_MS))]);
 
-      const [marketRows, pendingRows, commodityRows, dateRows, syncStatus] = await Promise.all([
-        fetchMarkets(false),
-        fetchMarkets(true),
+      const [marketRows, commodityRows, dateRows, syncStatus] = await Promise.all([
+        fetchMarkets(),
         fetchCommodities(),
         fetchArchiveDates(),
         fetchSyncStatus(),
       ]);
 
-      const mandiList = marketRows.map((m) => toMandi({ ...m, lat: m.lat!, lon: m.lon! }));
+      const mandiList = marketRows.map(toMandi);
       setMandis(mandiList);
       // Preserve the viewer's existing mandi selection; newly-appeared markets default to visible.
       setVisibleMandiCodes((prev) => {
@@ -123,7 +128,7 @@ export default function App() {
         for (const m of mandiList) next.add(m.code);
         return next;
       });
-      setPendingGeocodeCount(pendingRows.length);
+      setPendingGeocodeCount(mandiList.filter((m) => m.lat === null).length);
       setCommodities(commodityRows.map(toCommodity));
       setDates(dateRows);
       setLastSyncedAt(syncStatus.last_synced_at);
@@ -152,8 +157,8 @@ export default function App() {
   const mandiByMarketId = useMemo(() => new Map(mandis.map((m) => [m.code, m])), [mandis]);
 
   const rows = useMemo(
-    () => getCommoditySpreadRows(commodities, mandiByMarketId, pricesByCommodity, metric, visibleMandiCodes, asOf ?? ''),
-    [commodities, mandiByMarketId, pricesByCommodity, metric, visibleMandiCodes, asOf],
+    () => getCommoditySpreadRows(commodities, mandiByMarketId, pricesByCommodity, metric, visibleMandiCodes, asOf ?? '', requireGeocoded),
+    [commodities, mandiByMarketId, pricesByCommodity, metric, visibleMandiCodes, asOf, requireGeocoded],
   );
 
   const freshMarketIds = useMemo(() => getFreshMarketIds(pricesByCommodity), [pricesByCommodity]);
@@ -208,9 +213,15 @@ export default function App() {
   }
 
   function handleGeocoded(mandi: Mandi) {
-    setMandis((prev) => [...prev, mandi]);
+    // The market already exists in `mandis` (ungeocoded markets are included by
+    // default now) -- update it in place rather than appending a duplicate.
+    setMandis((prev) => prev.map((m) => (m.code === mandi.code ? mandi : m)));
     setVisibleMandiCodes((prev) => new Set(prev).add(mandi.code));
     setPendingGeocodeCount((prev) => Math.max(0, prev - 1));
+  }
+
+  function handleTierChange(commodityId: string, tierIndex: number) {
+    setTierByCommodity((prev) => ({ ...prev, [commodityId]: tierIndex }));
   }
 
   function handleSelect(row: CommoditySpreadRow) {
@@ -256,6 +267,8 @@ export default function App() {
         onWindowDaysChange={setWindowDays}
         priceUnit={priceUnit}
         onPriceUnitChange={setPriceUnit}
+        requireGeocoded={requireGeocoded}
+        onRequireGeocodedChange={setRequireGeocoded}
         visibleMandiCodes={visibleMandiCodes}
         onToggleMandi={toggleMandi}
         onSetMandiVisibility={setMandiVisibility}
@@ -272,13 +285,22 @@ export default function App() {
           priceUnit={priceUnit}
           topN={topN}
           onTopNChange={setTopN}
+          tierByCommodity={tierByCommodity}
+          onTierChange={handleTierChange}
         />
       </div>
 
       <div className="flex flex-col lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-2">
         <div className="lg:min-h-0 lg:border-r lg:border-wheat/10">
           {activeRow ? (
-            <RouteJourney key={activeRow.commodityId} row={activeRow} priceUnit={priceUnit} />
+            <RouteJourney
+              key={activeRow.commodityId}
+              row={activeRow}
+              tierIndex={tierByCommodity[activeRow.commodityId] ?? 0}
+              priceUnit={priceUnit}
+              transportRate={transportRate}
+              onTransportRateChange={setTransportRate}
+            />
           ) : (
             <div className="flex h-40 items-center justify-center text-sm text-dim lg:h-full">No commodity has a two-mandi spread right now.</div>
           )}

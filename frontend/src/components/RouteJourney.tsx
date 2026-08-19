@@ -1,27 +1,46 @@
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { CommoditySpreadRow, SpreadPoint } from '../lib/analytics';
 import { haversineKm } from '../lib/geo';
 import { formatKm, formatPct, formatRate, formatRupees, unitSuffix } from '../lib/format';
 import { useAnimatedNumber } from '../lib/useAnimatedNumber';
 import { Icon } from './Icon';
-import type { PriceUnit } from '../data/types';
+import type { Mandi, PriceUnit } from '../data/types';
 
 interface RouteJourneyProps {
   row: CommoditySpreadRow;
+  tierIndex: number;
   priceUnit: PriceUnit;
+  transportRate: number;
+  onTransportRateChange: (rate: number) => void;
 }
 
-// ₹, mock per-quintal-per-km freight rate — so a bigger load genuinely costs more to
-// haul, not just a flat per-trip fee independent of how much is being moved.
-const TRANSPORT_RATE_PER_QTL_KM = 1.2;
 const AVG_SPEED_KMPH = 35;
 const MIN_QUINTALS = 1;
 const MAX_QUINTALS = 500;
 const QUINTAL_STEP = 5;
 
+const MIN_RATE = 0.1;
+const MAX_RATE = 10;
+const RATE_STEP = 0.1;
+
 function clampQuintals(n: number): number {
   if (Number.isNaN(n)) return MIN_QUINTALS;
   return Math.min(MAX_QUINTALS, Math.max(MIN_QUINTALS, Math.round(n)));
+}
+
+function clampRate(n: number): number {
+  if (Number.isNaN(n)) return MIN_RATE;
+  // round to 2dp to avoid float drift (0.1 + 0.1 + 0.1 !== 0.3)
+  return Math.round(Math.min(MAX_RATE, Math.max(MIN_RATE, n)) * 100) / 100;
+}
+
+/** Null when either end isn't geocoded -- transport isn't a required constraint, so a
+ * trade between two unmapped (or one mapped, one not) markets is still perfectly valid,
+ * it just can't get a distance/transport-cost estimate. */
+function distanceOrNull(a: Mandi, b: Mandi): number | null {
+  if (a.lat === null || a.lon === null || b.lat === null || b.lon === null) return null;
+  return haversineKm({ lat: a.lat, lon: a.lon }, { lat: b.lat, lon: b.lon });
 }
 
 function formatTravelTime(hours: number): string {
@@ -40,6 +59,65 @@ function SummaryField({ label, value, valueClassName = 'text-wheat' }: { label: 
   );
 }
 
+/** Editable ₹/qtl·km freight rate -- stepper buttons plus a real text field for
+ * typing an exact value, same interaction pattern as the Qty control on each
+ * PointCard, just sized up since this is the number that drives the whole bill. */
+function TransportRateField({ value, onChange }: { value: number; onChange: (rate: number) => void }) {
+  const [raw, setRaw] = useState(String(value));
+  useEffect(() => {
+    setRaw(String(value));
+  }, [value]);
+
+  return (
+    <div>
+      <div className="text-[9px] uppercase tracking-wide text-dim">Transport Rate</div>
+      <div className="mt-0.5 flex items-center gap-1.5">
+        <button
+          onClick={() => onChange(clampRate(value - RATE_STEP))}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm border border-wheat/15 text-dim transition-colors duration-150 hover:border-wheat/30 hover:text-wheat"
+          aria-label="Decrease transport rate"
+        >
+          <Icon name="remove" size={13} />
+        </button>
+        <div className="flex items-baseline gap-1">
+          <span className="text-[13px] text-dim">₹</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={raw}
+            onChange={(e) => {
+              const val = e.target.value;
+              setRaw(val);
+              if (val.trim() === '') return; // let the field sit empty while retyping
+              const n = Number(val);
+              if (!Number.isNaN(n)) onChange(clampRate(n));
+            }}
+            onBlur={() => {
+              const n = Number(raw);
+              if (raw.trim() === '' || Number.isNaN(n)) {
+                setRaw(String(value)); // nothing valid typed -- restore last committed value
+              } else {
+                const clamped = clampRate(n);
+                setRaw(String(clamped));
+                onChange(clamped);
+              }
+            }}
+            className="w-14 rounded-sm border border-wheat/15 bg-ink px-1.5 py-1 text-center font-mono text-[15px] font-semibold tabular-nums text-wheat outline-none focus:border-amber"
+          />
+          <span className="text-[11px] text-dim">/qtl·km</span>
+        </div>
+        <button
+          onClick={() => onChange(clampRate(value + RATE_STEP))}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm border border-wheat/15 text-dim transition-colors duration-150 hover:border-wheat/30 hover:text-wheat"
+          aria-label="Increase transport rate"
+        >
+          <Icon name="add" size={13} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function BillRow({
   description,
   sub,
@@ -50,7 +128,7 @@ function BillRow({
   bold = false,
 }: {
   description: string;
-  sub?: string;
+  sub?: ReactNode;
   qty?: string;
   rate?: string;
   amount: string;
@@ -61,7 +139,7 @@ function BillRow({
     <div className={`grid grid-cols-[1fr_54px_88px_88px] items-baseline gap-2 py-1.5 ${bold ? 'font-bold' : ''}`}>
       <div className="min-w-0">
         <div className={`truncate text-[11px] ${bold ? 'text-wheat' : 'text-wheat/90'}`}>{description}</div>
-        {sub && <div className="truncate text-[9px] text-dim">{sub}</div>}
+        {sub && <div className="flex items-center gap-1 truncate text-[9px] text-dim">{sub}</div>}
       </div>
       <div className="text-right font-mono text-[10px] tabular-nums text-dim">{qty}</div>
       <div className="text-right font-mono text-[10px] tabular-nums text-dim">{rate}</div>
@@ -184,24 +262,25 @@ function PointCard({
   );
 }
 
-export function RouteJourney({ row, priceUnit }: RouteJourneyProps) {
+export function RouteJourney({ row, tierIndex, priceUnit, transportRate, onTransportRateChange }: RouteJourneyProps) {
   const [quantity, setQuantity] = useState(row.lotQuantity);
 
-  const buyPrice = row.min.price;
-  const sellPrice = row.max.price;
+  const tier = row.tiers[Math.min(tierIndex, row.tiers.length - 1)];
+  const buyPrice = tier.buy.price;
+  const sellPrice = tier.sell.price;
   const totalAtA = buyPrice * quantity;
   const totalAtB = sellPrice * quantity;
   const deltaPerQtl = sellPrice - buyPrice;
   const deltaPct = buyPrice > 0 ? (deltaPerQtl / buyPrice) * 100 : 0;
   const isGain = deltaPerQtl >= 0;
 
-  const distanceKm = haversineKm(row.min.mandi, row.max.mandi);
-  const transportCost = quantity * distanceKm * TRANSPORT_RATE_PER_QTL_KM;
+  const distanceKm = distanceOrNull(tier.buy.mandi, tier.sell.mandi);
+  const transportCost = distanceKm !== null ? quantity * distanceKm * transportRate : 0;
   const grossProfit = totalAtB - totalAtA;
   const netProfit = grossProfit - transportCost;
   const directCost = totalAtA + transportCost;
   const marginPct = totalAtA > 0 ? (netProfit / totalAtA) * 100 : 0;
-  const travelTime = distanceKm / AVG_SPEED_KMPH;
+  const travelTime = distanceKm !== null ? distanceKm / AVG_SPEED_KMPH : null;
 
   const animatedTotalA = useAnimatedNumber(totalAtA);
   const animatedTotalB = useAnimatedNumber(totalAtB);
@@ -215,7 +294,7 @@ export function RouteJourney({ row, priceUnit }: RouteJourneyProps) {
       <div className="flex flex-col shrink-0 gap-3 lg:flex-row lg:items-stretch">
         <PointCard
           label="Point A · Base"
-          point={row.min}
+          point={tier.buy}
           commodityName={row.commodityName}
           quantity={quantity}
           onQuantityChange={setQuantity}
@@ -240,12 +319,14 @@ export function RouteJourney({ row, priceUnit }: RouteJourneyProps) {
               className={`absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 ${isGain ? 'text-sage' : 'text-dim'}`}
             />
           </div>
-          <div className="mt-2 font-mono text-[11px] font-bold tabular-nums text-wheat">{formatKm(distanceKm)}</div>
+          <div className="mt-2 font-mono text-[11px] font-bold tabular-nums text-wheat">
+            {distanceKm !== null ? formatKm(distanceKm) : <span className="text-dim">unmapped</span>}
+          </div>
         </div>
 
         <PointCard
           label="Point B · Selling"
-          point={row.max}
+          point={tier.sell}
           commodityName={row.commodityName}
           quantity={quantity}
           total={animatedTotalB}
@@ -255,13 +336,18 @@ export function RouteJourney({ row, priceUnit }: RouteJourneyProps) {
       </div>
 
       <div className="mt-3 shrink-0 rounded-sm border border-wheat/10 bg-surface px-4 py-3">
-        <div className="flex items-center justify-between border-b border-dashed border-wheat/15 pb-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-dashed border-wheat/15 pb-2.5">
           <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-dim">
             <Icon name="receipt_long" size={13} className="text-dim" />
             Trade Bill
           </div>
-          <SummaryField label="Distance" value={`${formatKm(distanceKm)} · ~${formatTravelTime(travelTime)}`} />
-          <SummaryField label="Margin" value={formatPct(marginPct)} valueClassName={marginPct >= 0 ? 'text-sage' : 'text-rust'} />
+          <div className="flex flex-wrap items-center gap-4">
+            {distanceKm !== null && travelTime !== null && (
+              <SummaryField label="Distance" value={`${formatKm(distanceKm)} · ~${formatTravelTime(travelTime)}`} />
+            )}
+            {distanceKm !== null && <TransportRateField value={transportRate} onChange={onTransportRateChange} />}
+            <SummaryField label="Margin" value={formatPct(marginPct)} valueClassName={marginPct >= 0 ? 'text-sage' : 'text-rust'} />
+          </div>
         </div>
 
         <div className="grid grid-cols-[1fr_54px_88px_88px] gap-2 pt-2 text-[8px] font-semibold uppercase tracking-wide text-dim/70">
@@ -274,18 +360,20 @@ export function RouteJourney({ row, priceUnit }: RouteJourneyProps) {
         <div className="divide-y divide-dashed divide-wheat/8">
           <BillRow
             description={`${row.commodityName} · bought`}
-            sub={row.min.mandi.name}
+            sub={tier.buy.mandi.name}
             qty={`${quantity} qtl`}
             rate={formatRate(buyPrice, priceUnit)}
             amount={formatRupees(animatedTotalA)}
             amountClassName="text-wheat"
           />
-          <BillRow
-            description="Transport"
-            sub={`${formatKm(distanceKm)} @ ₹${TRANSPORT_RATE_PER_QTL_KM}/qtl·km`}
-            amount={`+${formatRupees(transportCost)}`}
-            amountClassName="text-wheat"
-          />
+          {distanceKm !== null && (
+            <BillRow
+              description="Transport"
+              sub={`${formatKm(distanceKm)} @ ₹${transportRate.toFixed(2)}/qtl·km`}
+              amount={`+${formatRupees(transportCost)}`}
+              amountClassName="text-wheat"
+            />
+          )}
         </div>
 
         <div className="border-t border-wheat/15">
@@ -295,7 +383,7 @@ export function RouteJourney({ row, priceUnit }: RouteJourneyProps) {
         <div className="divide-y divide-dashed divide-wheat/8 border-t border-dashed border-wheat/15">
           <BillRow
             description={`${row.commodityName} · sold`}
-            sub={row.max.mandi.name}
+            sub={tier.sell.mandi.name}
             qty={`${quantity} qtl`}
             rate={formatRate(sellPrice, priceUnit)}
             amount={formatRupees(animatedTotalB)}

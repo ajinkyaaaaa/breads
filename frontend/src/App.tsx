@@ -20,6 +20,8 @@ import {
   type CommoditySpreadRow,
 } from './lib/analytics';
 import { todayIso } from './lib/format';
+import { clearToken, getToken, setOnSessionExpired } from './lib/auth';
+import { LoginScreen } from './components/LoginScreen';
 import { Masthead } from './components/Masthead';
 import { StatStrip } from './components/StatStrip';
 import { TopOpportunities } from './components/TopOpportunities';
@@ -35,8 +37,15 @@ import type { Mandi, Metric, PriceUnit } from './data/types';
 const MIN_SYNC_OVERLAY_MS = 5000;
 
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => getToken() !== null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Any API call that comes back 401 (missing/invalid/expired token) drops
+  // straight back to the login screen, from anywhere in the app.
+  useEffect(() => {
+    setOnSessionExpired(() => setIsAuthenticated(false));
+  }, []);
 
   const [mandis, setMandis] = useState<Mandi[]>([]);
   const [commodities, setCommodities] = useState<ReturnType<typeof toCommodity>[]>([]);
@@ -70,6 +79,7 @@ export default function App() {
   // context now, not a requirement to appear), commodities, the list of dates the
   // archive actually has, and last-sync status.
   useEffect(() => {
+    if (!isAuthenticated) return;
     (async () => {
       try {
         const [marketRows, commodityRows, dateRows, syncStatus] = await Promise.all([
@@ -92,7 +102,7 @@ export default function App() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [isAuthenticated]);
 
   // True once the newest archived day falls behind the viewer's real calendar day.
   const isStale = useMemo(() => {
@@ -224,12 +234,21 @@ export default function App() {
     setTierByCommodity((prev) => ({ ...prev, [commodityId]: tierIndex }));
   }
 
+  function handleLogout() {
+    clearToken();
+    setIsAuthenticated(false);
+  }
+
   function handleSelect(row: CommoditySpreadRow) {
     setSelectedCommodityId(row.commodityId);
   }
 
   function handleSelectBest() {
     if (rows[0]) setSelectedCommodityId(rows[0].commodityId);
+  }
+
+  if (!isAuthenticated) {
+    return <LoginScreen onSuccess={() => setIsAuthenticated(true)} />;
   }
 
   if (loading) {
@@ -258,6 +277,7 @@ export default function App() {
         isStale={isStale}
         syncing={syncing}
         onRefresh={handleRefresh}
+        onLogout={handleLogout}
       />
       <Toolbar
         mandis={mandis}

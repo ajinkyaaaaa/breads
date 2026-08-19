@@ -16,6 +16,7 @@ interface MastheadProps {
   isStale: boolean;
   syncing: boolean;
   onRefresh: () => void;
+  onLogout: () => void;
 }
 
 const DAY_PRICES_URL = 'https://agmarknet.gov.in/home';
@@ -31,6 +32,7 @@ export function Masthead({
   isStale,
   syncing,
   onRefresh,
+  onLogout,
 }: MastheadProps) {
   const index = asOf ? dates.indexOf(asOf) : -1;
   const atEarliest = index <= 0;
@@ -171,6 +173,15 @@ export function Masthead({
             <Icon name="chevron_right" size={15} />
           </button>
         </div>
+
+        <button
+          onClick={onLogout}
+          title="Log out"
+          className="flex items-center gap-1.5 rounded-sm border border-wheat/15 bg-surface px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide text-dim transition-colors duration-150 hover:border-rust/40 hover:text-rust"
+        >
+          <Icon name="logout" size={13} />
+          Log Out
+        </button>
       </div>
     </header>
   );

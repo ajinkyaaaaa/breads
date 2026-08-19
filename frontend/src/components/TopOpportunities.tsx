@@ -46,7 +46,7 @@ function MandiLine({ point, priceUnit }: { point: SpreadPoint; priceUnit: PriceU
         <LocationBadge hasLocation={typeof point.mandi.lat === 'number' && typeof point.mandi.lon === 'number'} size={19} />
         <span>{point.mandi.name}</span>
       </span>
-      <span className="pl-[46px] font-mono text-[10px] text-dim">
+      <span className="pl-[46px] font-mono text-[10px] text-wheat">
         {point.mandi.taluka} · {formatRate(point.price, priceUnit)}
         {unitSuffix(priceUnit)}
       </span>
@@ -79,7 +79,7 @@ export function TopOpportunities({
         <span>Opportunities</span>
       </div>
       {topRows.length === 0 ? (
-        <div className="flex flex-1 items-center text-sm text-dim">No spreads to rank for this day.</div>
+        <div className="flex flex-1 items-center text-sm text-dim">No data for this day yet.</div>
       ) : (
         <div
           className={`flex flex-1 items-stretch gap-2 overflow-x-auto scroll-smooth ${canFillRow ? 'lg:grid lg:grid-cols-5' : ''}`}
@@ -104,7 +104,10 @@ export function TopOpportunities({
                   canFillRow ? 'lg:w-auto lg:min-w-0 lg:shrink' : ''
                 } ${active ? 'animate-kpi-select border-amber/55 bg-surface2' : 'border-amber/15 bg-surface hover:border-amber/40 hover:bg-surface2'}`}
               >
-                <span className="absolute inset-y-0 left-0 w-[3px] bg-amber" style={{ opacity: rank.opacity }} />
+                <span
+                  className={`absolute inset-y-0 left-0 w-[3px] ${active ? 'bg-amber' : 'bg-dim'}`}
+                  style={{ opacity: active ? rank.opacity : rank.opacity * 0.7 }}
+                />
 
                 <div className="flex w-full items-start justify-between gap-1.5">
                   <div className="flex min-w-0 items-baseline gap-1.5">
@@ -130,12 +133,18 @@ export function TopOpportunities({
 
                 <div className="mt-2.5 border-t border-dashed border-wheat/15" />
 
-                <div className="mt-2.5 flex flex-col gap-1.5">
+                <div className="relative isolate mt-2.5 flex flex-col gap-1.5">
+                  {/* Runs the full height behind both rows -- badges are opaque
+                      so the line simply disappears under them, reading as a
+                      single connection from the buy tick down to the sell tick. */}
+                  <span
+                    className="absolute left-[9px] top-0 -z-10 w-px bg-gradient-to-b from-amber to-sage"
+                    style={{ bottom: 22 }}
+                  />
                   <MandiLine point={tier.buy} priceUnit={priceUnit} />
 
-                  <div className="flex items-center gap-1.5 pl-[3px]">
-                    <span className="h-3 w-px bg-gradient-to-b from-amber to-sage" />
-                    <Icon name="arrow_forward" size={10} className="rotate-90 text-dim" />
+                  <div className="flex items-center gap-1.5 pl-[26px]">
+                    <Icon name="arrow_forward" size={14} className="-mt-3.5 rotate-90 text-wheat" />
                   </div>
 
                   <MandiLine point={tier.sell} priceUnit={priceUnit} />

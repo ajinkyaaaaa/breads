@@ -1,4 +1,19 @@
+import { getToken, notifySessionExpired } from './auth';
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8010';
+
+function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function checkOk(res: Response, label: string): Promise<void> {
+  if (res.status === 401) {
+    notifySessionExpired();
+    throw new Error('Session expired -- please log in again');
+  }
+  if (!res.ok) throw new Error(`${label} failed: ${res.status}`);
+}
 
 export interface ApiCommodity {
   id: number;
@@ -58,8 +73,8 @@ export interface ApiHistoryRow {
 }
 
 async function getJSON<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`);
-  if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+  const res = await fetch(`${API_BASE}${path}`, { headers: authHeaders() });
+  await checkOk(res, `GET ${path}`);
   return res.json();
 }
 
@@ -107,8 +122,8 @@ export interface IngestResult {
 }
 
 export async function triggerIngest(): Promise<IngestResult> {
-  const res = await fetch(`${API_BASE}/api/ingest`, { method: 'POST' });
-  if (!res.ok) throw new Error(`POST /api/ingest failed: ${res.status}`);
+  const res = await fetch(`${API_BASE}/api/ingest`, { method: 'POST', headers: authHeaders() });
+  await checkOk(res, 'POST /api/ingest');
   return res.json();
 }
 
@@ -118,9 +133,9 @@ export async function updateMarketLocation(
 ): Promise<ApiMarket> {
   const res = await fetch(`${API_BASE}/api/markets/${id}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`PATCH /api/markets/${id} failed: ${res.status}`);
+  await checkOk(res, `PATCH /api/markets/${id}`);
   return res.json();
 }

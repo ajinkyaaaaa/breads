@@ -1,10 +1,11 @@
 import os
 from datetime import date
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from .auth import issue_token, require_auth, verify_credentials
 from .db import get_connection
 from .ingest import run_ingest
 from .resolve import MAX_WINDOW_DAYS, _normalize_units, resolve_all_prices, resolve_commodity_prices
@@ -22,8 +23,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Everything except /api/login requires a valid session -- attached once here
+# rather than repeated on every route.
+protected = APIRouter(dependencies=[Depends(require_auth)])
 
-@app.get("/api/commodities")
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/api/login")
+def login(body: LoginRequest):
+    if not verify_credentials(body.username, body.password):
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+    return {"token": issue_token(body.username)}
+
+
+@protected.get("/api/commodities")
 def list_commodities():
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
@@ -39,7 +56,7 @@ def list_commodities():
         return cur.fetchall()
 
 
-@app.get("/api/markets")
+@protected.get("/api/markets")
 def list_markets(needs_geocoding: bool | None = None):
     query = "SELECT id, district, market_name, display_name, lat, lon, first_seen_date, last_seen_date FROM markets"
     params: dict = {}
@@ -59,7 +76,7 @@ class MarketLocationUpdate(BaseModel):
     geocoded_by: str = "ui_editor"
 
 
-@app.patch("/api/markets/{market_id}")
+@protected.patch("/api/markets/{market_id}")
 def update_market_location(market_id: int, update: MarketLocationUpdate):
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
@@ -81,7 +98,7 @@ def update_market_location(market_id: int, update: MarketLocationUpdate):
     return row
 
 
-@app.get("/api/prices")
+@protected.get("/api/prices")
 def get_prices(commodity_id: int, window_days: int = 1, as_of: date | None = None):
     if window_days < 1 or window_days > MAX_WINDOW_DAYS:
         raise HTTPException(status_code=400, detail=f"window_days must be between 1 and {MAX_WINDOW_DAYS}")
@@ -95,7 +112,7 @@ def get_prices(commodity_id: int, window_days: int = 1, as_of: date | None = Non
     }
 
 
-@app.get("/api/prices/all")
+@protected.get("/api/prices/all")
 def get_all_prices(window_days: int = 1, as_of: date | None = None):
     if window_days < 1 or window_days > MAX_WINDOW_DAYS:
         raise HTTPException(status_code=400, detail=f"window_days must be between 1 and {MAX_WINDOW_DAYS}")
@@ -108,7 +125,7 @@ def get_all_prices(window_days: int = 1, as_of: date | None = None):
     }
 
 
-@app.get("/api/prices/history")
+@protected.get("/api/prices/history")
 def get_price_history(commodity_id: int, days: int = 30):
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
@@ -134,14 +151,14 @@ def get_price_history(commodity_id: int, days: int = 30):
     return rows
 
 
-@app.get("/api/dates")
+@protected.get("/api/dates")
 def list_archive_dates():
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute("SELECT DISTINCT arrival_date FROM price_observations ORDER BY arrival_date")
         return [row["arrival_date"] for row in cur.fetchall()]
 
 
-@app.get("/api/sync-status")
+@protected.get("/api/sync-status")
 def get_sync_status():
     """Newest arrival_date the archive has, and the real wall-clock time of the
     most recent ingest write -- lets the frontend tell "showing an older day
@@ -156,6 +173,9 @@ def get_sync_status():
     }
 
 
-@app.post("/api/ingest")
+@protected.post("/api/ingest")
 def trigger_ingest():
     return run_ingest()
+
+
+app.include_router(protected)

@@ -1,10 +1,11 @@
 import type { CommoditySpreadRow, SpreadPoint } from '../lib/analytics';
 import { getCommodityCategory } from '../lib/categories';
-import { formatPct, formatRate, unitSuffix } from '../lib/format';
+import { formatPct, formatRate, formatRupees, unitSuffix } from '../lib/format';
 import type { PriceUnit } from '../data/types';
 import { FreshnessBadge } from './FreshnessBadge';
 import { Icon } from './Icon';
 import { LocationBadge } from './LocationBadge';
+import { TierDropdown } from './TierDropdown';
 import { TopNDropdown } from './TopNDropdown';
 
 const CATEGORY_ICON = { fruit: 'nutrition', vegetable: 'eco' } as const;
@@ -33,6 +34,8 @@ interface TopOpportunitiesProps {
   priceUnit: PriceUnit;
   topN: number;
   onTopNChange: (n: number) => void;
+  tierByCommodity: Record<string, number>;
+  onTierChange: (commodityId: string, tierIndex: number) => void;
 }
 
 function MandiLine({ point, priceUnit }: { point: SpreadPoint; priceUnit: PriceUnit }) {
@@ -51,7 +54,16 @@ function MandiLine({ point, priceUnit }: { point: SpreadPoint; priceUnit: PriceU
   );
 }
 
-export function TopOpportunities({ rows, selectedCommodityId, onSelect, priceUnit, topN, onTopNChange }: TopOpportunitiesProps) {
+export function TopOpportunities({
+  rows,
+  selectedCommodityId,
+  onSelect,
+  priceUnit,
+  topN,
+  onTopNChange,
+  tierByCommodity,
+  onTierChange,
+}: TopOpportunitiesProps) {
   const topRows = rows.slice(0, topN);
   // At the default of 5, cards stretch to divide the row evenly (matches the
   // original layout) since 5 fixed-width cards leave the row visibly short of
@@ -76,55 +88,71 @@ export function TopOpportunities({ rows, selectedCommodityId, onSelect, priceUni
             const active = row.commodityId === selectedCommodityId;
             const category = getCommodityCategory(row.commodityName);
             const rank = RANK_STYLE[i] ?? RANK_STYLE[RANK_STYLE.length - 1];
+            const tierIndex = Math.min(tierByCommodity[row.commodityId] ?? 0, row.tiers.length - 1);
+            const tier = row.tiers[tierIndex];
 
             return (
-              <button
+              <div
                 key={`${row.commodityId}-${active}`}
+                role="button"
+                tabIndex={0}
                 onClick={() => onSelect(row)}
-                className={`relative flex w-[290px] shrink-0 flex-col overflow-hidden rounded-sm border pl-4 pr-3 py-3 text-left transition-[background-color,border-color,transform] duration-100 ease-out active:scale-[0.97] active:duration-75 ${
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') onSelect(row);
+                }}
+                className={`relative flex w-[290px] shrink-0 cursor-pointer flex-col overflow-hidden rounded-sm border pl-4 pr-3 py-3 text-left outline-none transition-[background-color,border-color,transform] duration-100 ease-out active:scale-[0.97] active:duration-75 ${
                   canFillRow ? 'lg:w-auto lg:min-w-0 lg:shrink' : ''
                 } ${active ? 'animate-kpi-select border-amber/55 bg-surface2' : 'border-amber/15 bg-surface hover:border-amber/40 hover:bg-surface2'}`}
               >
                 <span className="absolute inset-y-0 left-0 w-[3px] bg-amber" style={{ opacity: rank.opacity }} />
 
-                <div className="flex w-full items-baseline gap-1.5">
-                  <span
-                    className="font-mono font-bold leading-none tabular-nums text-amber"
-                    style={{ fontSize: rank.size, opacity: rank.opacity }}
-                  >
-                    {String(i + 1).padStart(2, '0')}
-                  </span>
-                  {category && (
-                    <span className="shrink-0" title={category}>
-                      <Icon name={CATEGORY_ICON[category]} size={14} filled className="text-white" />
+                <div className="flex w-full items-start justify-between gap-1.5">
+                  <div className="flex min-w-0 items-baseline gap-1.5">
+                    <span
+                      className="font-mono font-bold leading-none tabular-nums text-amber"
+                      style={{ fontSize: rank.size, opacity: rank.opacity }}
+                    >
+                      {String(i + 1).padStart(2, '0')}
                     </span>
-                  )}
-                  <span className="truncate font-display text-[15px] font-semibold text-wheat">{row.commodityName}</span>
+                    {category && (
+                      <span className="shrink-0" title={category}>
+                        <Icon name={CATEGORY_ICON[category]} size={14} filled className="text-white" />
+                      </span>
+                    )}
+                    <span className="truncate font-display text-[15px] font-semibold text-wheat">{row.commodityName}</span>
+                  </div>
+                  <TierDropdown
+                    tierCount={row.tiers.length}
+                    value={tierIndex}
+                    onChange={(idx) => onTierChange(row.commodityId, idx)}
+                  />
                 </div>
 
                 <div className="mt-2.5 border-t border-dashed border-wheat/15" />
 
                 <div className="mt-2.5 flex flex-col gap-1.5">
-                  <MandiLine point={row.min} priceUnit={priceUnit} />
+                  <MandiLine point={tier.buy} priceUnit={priceUnit} />
 
                   <div className="flex items-center gap-1.5 pl-[3px]">
                     <span className="h-3 w-px bg-gradient-to-b from-amber to-sage" />
                     <Icon name="arrow_forward" size={10} className="rotate-90 text-dim" />
                   </div>
 
-                  <MandiLine point={row.max} priceUnit={priceUnit} />
+                  <MandiLine point={tier.sell} priceUnit={priceUnit} />
                 </div>
 
                 <div className="mt-2.5 flex items-baseline justify-between border-t border-dashed border-wheat/15 pt-2">
-                  <span className="font-mono text-lg font-bold leading-none tabular-nums text-sage">
-                    +{formatRate(row.spread, priceUnit)}
-                    <span className="text-[11px] font-semibold">{unitSuffix(priceUnit)}</span>
+                  <span className="flex items-baseline gap-1">
+                    <span className="font-mono text-lg font-bold leading-none tabular-nums text-sage">
+                      +{formatRupees(tier.lotProfit)}
+                    </span>
+                    <span className="font-mono text-[10px] text-dim">/{row.lotQuantity}qtl</span>
                   </span>
                   <span className="rounded-full bg-sage-dim px-1.5 py-0.5 font-mono text-[10px] font-semibold text-sage">
-                    {formatPct(row.spreadPct, { sign: true })}
+                    {formatPct(tier.spreadPct, { sign: true })}
                   </span>
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>

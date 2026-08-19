@@ -1,5 +1,5 @@
 import type { MarketStats } from '../lib/analytics';
-import { formatKm, formatPct, formatRupees } from '../lib/format';
+import { formatPct, formatRupees } from '../lib/format';
 import { Icon } from './Icon';
 
 interface StatStripProps {
@@ -46,9 +46,9 @@ export function StatStrip({ stats, onSelectBest, isBestSelected }: StatStripProp
               <span className="text-dim">
                 {bestRow.commodityName} · {bestRow.lotQuantity} qtl ·
               </span>
-              <span className="truncate text-wheat">{bestRow.min.mandi.name}</span>
+              <span className="truncate text-wheat">{bestRow.tiers[0].buy.mandi.name}</span>
               <Icon name="arrow_forward" size={11} className="shrink-0 text-dim" />
-              <span className="truncate text-sage">{bestRow.max.mandi.name}</span>
+              <span className="truncate text-sage">{bestRow.tiers[0].sell.mandi.name}</span>
             </div>
           </>
         ) : (
@@ -85,15 +85,6 @@ export function StatStrip({ stats, onSelectBest, isBestSelected }: StatStripProp
             <span key={i} className={`h-1 flex-1 rounded-full ${i < mandisReporting ? 'bg-sage' : 'bg-wheat/10'}`} />
           ))}
         </div>
-      </Stat>
-
-      <Stat label="Best Haul">
-        {bestRow ? (
-          <div className="font-mono text-xl font-semibold leading-none tabular-nums text-wheat">{formatKm(bestRow.distanceKm)}</div>
-        ) : (
-          <div className="font-mono text-xl text-dim">—</div>
-        )}
-        <div className="mt-1 text-[11px] text-dim">shortest top-spread route</div>
       </Stat>
     </div>
   );

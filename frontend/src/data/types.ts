@@ -4,8 +4,9 @@ export interface Mandi {
   /** Hindi/Devanagari rendering of the place name, when curated. */
   nameHi?: string;
   taluka: string;
-  lat: number;
-  lon: number;
+  /** Null until geocoded via the Location Editor -- location is optional context, not a requirement for a market to appear in recommendations. */
+  lat: number | null;
+  lon: number | null;
 }
 
 export interface Commodity {

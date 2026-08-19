@@ -10,6 +10,8 @@ interface ToolbarProps {
   onWindowDaysChange: (days: number) => void;
   priceUnit: PriceUnit;
   onPriceUnitChange: (unit: PriceUnit) => void;
+  requireGeocoded: boolean;
+  onRequireGeocodedChange: (v: boolean) => void;
   visibleMandiCodes: Set<string>;
   onToggleMandi: (code: string) => void;
   onSetMandiVisibility: (codes: string[], visible: boolean) => void;
@@ -28,6 +30,8 @@ export function Toolbar({
   onWindowDaysChange,
   priceUnit,
   onPriceUnitChange,
+  requireGeocoded,
+  onRequireGeocodedChange,
   visibleMandiCodes,
   onToggleMandi,
   onSetMandiVisibility,
@@ -92,6 +96,18 @@ export function Toolbar({
           ))}
         </div>
       </div>
+
+      <div className="h-4 w-px shrink-0 bg-wheat/10" />
+
+      <label className="flex shrink-0 cursor-pointer items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-amber">
+        <input
+          type="checkbox"
+          checked={requireGeocoded}
+          onChange={(e) => onRequireGeocodedChange(e.target.checked)}
+          className="h-3.5 w-3.5 accent-amber"
+        />
+        <span title="When on, only shows recommendations built from mandis with a known location on the map">Mapped mandis only</span>
+      </label>
 
       <div className="h-4 w-px shrink-0 bg-wheat/10" />
 

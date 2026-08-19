@@ -1,0 +1,15 @@
+$kind: http-request
+url: https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key={{gov_api_key}}&format=json&limit=50&filters[state]=Maharashtra&filters[district]=Nagpur
+method: GET
+queryParams:
+  - key: api-key
+    value: "{{gov_api_key}}"
+  - key: format
+    value: json
+  - key: limit
+    value: "50"
+  - key: filters[state]
+    value: Maharashtra
+  - key: filters[district]
+    value: Nagpur
+order: 1786964432353

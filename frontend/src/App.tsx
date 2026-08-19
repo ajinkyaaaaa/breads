@@ -69,7 +69,6 @@ export default function App() {
   const [trendCommodityId, setTrendCommodityId] = useState<string | null>(null);
   const [trendHistory, setTrendHistory] = useState<Awaited<ReturnType<typeof fetchPriceHistory>>>([]);
 
-  const [pendingGeocodeCount, setPendingGeocodeCount] = useState(0);
   const [locationEditorOpen, setLocationEditorOpen] = useState(false);
 
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
@@ -91,7 +90,6 @@ export default function App() {
         const mandiList = marketRows.map(toMandi);
         setMandis(mandiList);
         setVisibleMandiCodes(new Set(mandiList.map((m) => m.code)));
-        setPendingGeocodeCount(mandiList.filter((m) => m.lat === null).length);
         setCommodities(commodityRows.map(toCommodity));
         setDates(dateRows);
         setAsOf(dateRows[dateRows.length - 1] ?? null);
@@ -138,7 +136,6 @@ export default function App() {
         for (const m of mandiList) next.add(m.code);
         return next;
       });
-      setPendingGeocodeCount(mandiList.filter((m) => m.lat === null).length);
       setCommodities(commodityRows.map(toCommodity));
       setDates(dateRows);
       setLastSyncedAt(syncStatus.last_synced_at);
@@ -227,7 +224,6 @@ export default function App() {
     // default now) -- update it in place rather than appending a duplicate.
     setMandis((prev) => prev.map((m) => (m.code === mandi.code ? mandi : m)));
     setVisibleMandiCodes((prev) => new Set(prev).add(mandi.code));
-    setPendingGeocodeCount((prev) => Math.max(0, prev - 1));
   }
 
   function handleTierChange(commodityId: string, tierIndex: number) {
@@ -271,7 +267,6 @@ export default function App() {
         dates={dates}
         asOf={asOf}
         onAsOfChange={setAsOf}
-        pendingGeocodeCount={pendingGeocodeCount}
         onOpenLocationEditor={() => setLocationEditorOpen(true)}
         lastSyncedAt={lastSyncedAt}
         isStale={isStale}
@@ -322,7 +317,7 @@ export default function App() {
               onTransportRateChange={setTransportRate}
             />
           ) : (
-            <div className="flex h-40 items-center justify-center text-sm text-dim lg:h-full">No commodity has a two-mandi spread right now.</div>
+            <div className="flex h-40 items-center justify-center text-sm text-dim lg:h-full">No data for this day yet.</div>
           )}
         </div>
         <div className="border-t border-wheat/10 lg:min-h-0 lg:border-t-0">

@@ -40,6 +40,10 @@ export default {
           '0%': { transform: 'rotate(0deg)' },
           '100%': { transform: 'rotate(360deg)' },
         },
+        'bar-sweep': {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(400%)' },
+        },
         // Irregular, unevenly-spaced stops (short blips mixed with long steady
         // stretches) so it reads as an aging neon tube, not a clean pulse.
         'neon-flicker': {
@@ -68,6 +72,7 @@ export default {
         'kpi-select': 'kpi-select 160ms cubic-bezier(0.16, 1, 0.3, 1)',
         'orb-breathe': 'orb-breathe 2.4s ease-in-out infinite',
         'orb-shimmer': 'orb-shimmer 5s linear infinite',
+        'bar-sweep': 'bar-sweep 1.3s ease-in-out infinite',
         'neon-flicker': 'neon-flicker 5s linear infinite',
       },
     },

@@ -11,10 +11,10 @@ const LABEL: Record<Freshness, string> = {
   old: 'Synced more than 2 days ago',
 };
 
-const SAGE = '#7A9B76';
+const NEON_GREEN = '#39FF14';
 const WHITE = '#FFFFFF';
 
-/** Small black square status badge with a white border: sage tick (today), white tilde (carried forward from yesterday), white burst (older than 2 days). */
+/** Small black square status badge with a white border: neon-green tick (today), white tilde (carried forward from yesterday), white burst (older than 2 days). */
 export function FreshnessBadge({ tier, size = 17 }: FreshnessBadgeProps) {
   return (
     <span
@@ -24,7 +24,14 @@ export function FreshnessBadge({ tier, size = 17 }: FreshnessBadgeProps) {
     >
       {tier === 'fresh' && (
         <svg width={size * 0.6} height={size * 0.6} viewBox="0 0 24 24" fill="none">
-          <path d="M5 13l4 4L19 7" stroke={SAGE} strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M5 13l4 4L19 7"
+            stroke={NEON_GREEN}
+            strokeWidth="3.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ filter: `drop-shadow(0 0 2px ${NEON_GREEN})` }}
+          />
         </svg>
       )}
       {tier === 'recent' && <span className="text-[9px] font-bold leading-none text-white">~</span>}

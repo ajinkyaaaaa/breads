@@ -13,7 +13,12 @@ export function LocationBadge({ hasLocation, size = 17 }: LocationBadgeProps) {
       className="inline-flex shrink-0 items-center justify-center rounded-sm border border-white bg-black"
       style={{ width: size, height: size }}
     >
-      <Icon name="pin_drop" size={size * 0.62} filled={hasLocation} className={hasLocation ? 'text-sage' : 'text-dim'} />
+      <Icon
+        name="pin_drop"
+        size={size * 0.62}
+        filled={hasLocation}
+        className={hasLocation ? 'text-[#39FF14] drop-shadow-[0_0_2px_#39FF14]' : 'text-dim'}
+      />
     </span>
   );
 }

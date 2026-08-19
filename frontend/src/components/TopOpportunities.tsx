@@ -42,11 +42,11 @@ function MandiLine({ point, priceUnit }: { point: SpreadPoint; priceUnit: PriceU
   return (
     <div className="flex flex-col gap-0.5">
       <span className="flex items-center gap-1 text-[12px] font-medium text-amber">
-        <FreshnessBadge tier={point.freshness} size={15} />
-        <LocationBadge hasLocation={typeof point.mandi.lat === 'number' && typeof point.mandi.lon === 'number'} size={15} />
+        <FreshnessBadge tier={point.freshness} size={19} />
+        <LocationBadge hasLocation={typeof point.mandi.lat === 'number' && typeof point.mandi.lon === 'number'} size={19} />
         <span>{point.mandi.name}</span>
       </span>
-      <span className="pl-[38px] font-mono text-[10px] text-dim">
+      <span className="pl-[46px] font-mono text-[10px] text-dim">
         {point.mandi.taluka} · {formatRate(point.price, priceUnit)}
         {unitSuffix(priceUnit)}
       </span>

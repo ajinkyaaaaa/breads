@@ -1,18 +1,124 @@
-import { MANDIS } from '../data/mandis';
-import { COMMODITIES } from '../data/commodities';
-import { DATES, resolvePrice, resolvePricesForCommodity, weekSeries } from '../data/mockPrices';
+import type { ApiCommodity, ApiHistoryRow, ApiPriceRow } from './api';
 import { haversineKm } from './geo';
-import type { Mandi, Metric } from '../data/types';
+import type { Freshness, Mandi, Metric } from '../data/types';
+
+/** Curated per-commodity lot size isn't sourced from the API (no arrival-quantity field exists) -- used until a commodity gets a curated default_lot_quintals value. */
+const DEFAULT_LOT_QUINTALS = 25;
+
+export function toMandi(market: { id: number; district: string; market_name: string; display_name: string | null; lat: number; lon: number }): Mandi {
+  return {
+    code: String(market.id),
+    name: market.display_name ?? market.market_name,
+    taluka: market.district,
+    lat: market.lat,
+    lon: market.lon,
+  };
+}
+
+export function toCommodity(c: ApiCommodity) {
+  return {
+    id: String(c.id),
+    name: c.name,
+    nameHi: c.name_hi ?? undefined,
+    unit: 'Quintal',
+    defaultLotQuintals: c.default_lot_quintals ?? DEFAULT_LOT_QUINTALS,
+  };
+}
+
+/** Normalized (Rs/quintal-corrected) field -- always what calculations should use. */
+function priceField(row: ApiPriceRow, metric: Metric): number | null {
+  if (metric === 'min') return row.min_price_normalized;
+  if (metric === 'max') return row.max_price_normalized;
+  return row.modal_price_normalized;
+}
+
+/** Raw as-reported field, for the "adjusted from ₹X/kg" UI note. */
+function rawPriceField(row: ApiPriceRow, metric: Metric): number | null {
+  if (metric === 'min') return row.min_price;
+  if (metric === 'max') return row.max_price;
+  return row.modal_price;
+}
+
+/** A market can report multiple variety/grade combinations for the same
+ * commodity on the same day (e.g. Tur FAQ and Tur Non-FAQ) -- the archive
+ * keeps those as separate rows, but the current UI has no per-variety
+ * dimension, so they're blended into one price per market via averaging.
+ */
+/** How many calendar days separate the archive date a price was actually
+ * reported on and the day currently selected in the UI -- drives the
+ * fresh (today) / recent (yesterday) / old (2+ days back) status dot. */
+function freshnessFromDate(asOfDate: string | null, requestedAsOf: string): Freshness {
+  if (!asOfDate) return 'old';
+  const diffDays = Math.round((Date.parse(requestedAsOf) - Date.parse(asOfDate)) / 86_400_000);
+  if (diffDays <= 0) return 'fresh';
+  if (diffDays === 1) return 'recent';
+  return 'old';
+}
+
+function collapseMarketPrices(
+  rows: ApiPriceRow[],
+  metric: Metric,
+  requestedAsOf: string,
+): Map<number, { price: number; isFallback: boolean; unit: 'quintal' | 'kg'; rawPrice?: number; freshness: Freshness }> {
+  const byMarket = new Map<number, ApiPriceRow[]>();
+  for (const row of rows) {
+    if (row.status === 'missing') continue;
+    const value = priceField(row, metric);
+    if (value === null) continue;
+    const list = byMarket.get(row.market_id) ?? [];
+    list.push(row);
+    byMarket.set(row.market_id, list);
+  }
+
+  const result = new Map<
+    number,
+    { price: number; isFallback: boolean; unit: 'quintal' | 'kg'; rawPrice?: number; freshness: Freshness }
+  >();
+  for (const [marketId, marketRows] of byMarket) {
+    const values = marketRows.map((r) => priceField(r, metric)!);
+    const avgPrice = values.reduce((sum, v) => sum + v, 0) / values.length;
+    const isFallback = marketRows.every((r) => r.status !== 'fresh');
+
+    const anyKg = marketRows.some((r) => r.unit === 'kg');
+    let rawPrice: number | undefined;
+    if (anyKg) {
+      const rawValues = marketRows.map((r) => rawPriceField(r, metric)!);
+      rawPrice = rawValues.reduce((sum, v) => sum + v, 0) / rawValues.length;
+    }
+
+    // A market can report some varieties today and others on an older date --
+    // take the freshest date any of its variety rows carries.
+    const latestDate = marketRows.reduce<string | null>((latest, r) => {
+      if (!r.as_of_date) return latest;
+      return !latest || r.as_of_date > latest ? r.as_of_date : latest;
+    }, null);
+
+    result.set(marketId, {
+      price: avgPrice,
+      isFallback,
+      unit: anyKg ? 'kg' : 'quintal',
+      rawPrice,
+      freshness: freshnessFromDate(latestDate, requestedAsOf),
+    });
+  }
+  return result;
+}
 
 export interface SpreadPoint {
   mandi: Mandi;
   price: number;
   isFallback: boolean;
+  /** 'kg' when the source's raw entry looked like Rs/kg mistaken for Rs/quintal -- `price` is already corrected, `rawPrice` is what was actually reported. */
+  unit: 'quintal' | 'kg';
+  rawPrice?: number;
+  /** fresh = reported on the selected day, recent = carried forward from the day before, old = older than that. */
+  freshness: Freshness;
 }
 
 export interface CommoditySpreadRow {
   commodityId: string;
   commodityName: string;
+  commodityNameHi?: string;
   unit: string;
   /** Every reporting, currently-visible mandi's price, ascending. */
   points: SpreadPoint[];
@@ -22,21 +128,32 @@ export interface CommoditySpreadRow {
   spreadPct: number;
   distanceKm: number;
   profitabilityScore: number;
-  /** Illustrative default trade-lot size for this commodity, in quintals. */
   lotQuantity: number;
-  /** Gross profit (before transport) for moving one default lot from the low mandi to the high mandi. */
   lotProfit: number;
 }
 
 /** One row per commodity: the full price spread across every visible, reporting mandi. */
-export function getCommoditySpreadRows(date: string, metric: Metric, visibleMandiCodes: Set<string>): CommoditySpreadRow[] {
+export function getCommoditySpreadRows(
+  commodities: ReturnType<typeof toCommodity>[],
+  mandiByMarketId: Map<string, Mandi>,
+  pricesByCommodity: Record<string, ApiPriceRow[]>,
+  metric: Metric,
+  visibleMandiCodes: Set<string>,
+  asOf: string,
+): CommoditySpreadRow[] {
   const rows: CommoditySpreadRow[] = [];
 
-  for (const commodity of COMMODITIES) {
-    const points: SpreadPoint[] = resolvePricesForCommodity(commodity.id, date)
-      .filter((r) => r.resolved && visibleMandiCodes.has(r.mandi.code))
-      .map((r) => ({ mandi: r.mandi, price: r.resolved!.record[metric], isFallback: r.resolved!.isFallback }))
-      .sort((a, b) => a.price - b.price);
+  for (const commodity of commodities) {
+    const priceRows = pricesByCommodity[commodity.id] ?? [];
+    const collapsed = collapseMarketPrices(priceRows, metric, asOf);
+
+    const points: SpreadPoint[] = [];
+    for (const [marketId, { price, isFallback, unit, rawPrice, freshness }] of collapsed) {
+      const mandi = mandiByMarketId.get(String(marketId));
+      if (!mandi || !visibleMandiCodes.has(mandi.code)) continue;
+      points.push({ mandi, price, isFallback, unit, rawPrice, freshness });
+    }
+    points.sort((a, b) => a.price - b.price);
 
     if (points.length < 2) continue;
 
@@ -52,6 +169,7 @@ export function getCommoditySpreadRows(date: string, metric: Metric, visibleMand
     rows.push({
       commodityId: commodity.id,
       commodityName: commodity.name,
+      commodityNameHi: commodity.nameHi,
       unit: commodity.unit,
       points,
       min,
@@ -78,30 +196,27 @@ export interface MarketStats {
   totalMandis: number;
 }
 
-/** Market-wide stats for the top strip — deliberately commodity-agnostic since the table shows every commodity at once. */
-export function getMarketStats(date: string, metric: Metric, visibleMandiCodes: Set<string>): MarketStats {
-  const rows = getCommoditySpreadRows(date, metric, visibleMandiCodes);
+/** Market-wide stats for the top strip. `prevDayRows` is optional -- pass
+ * undefined when there isn't enough archive history yet for a comparison. */
+export function getMarketStats(
+  rows: CommoditySpreadRow[],
+  prevDayRows: CommoditySpreadRow[] | undefined,
+  freshMarketIds: Set<string>,
+  visibleMandiCodes: Set<string>,
+  totalCommodities: number,
+): MarketStats {
   const [bestRow] = rows;
   const avgSpreadPct = rows.length ? rows.reduce((sum, r) => sum + r.spreadPct, 0) / rows.length : undefined;
 
-  const dateIdx = DATES.indexOf(date);
   let avgSpreadPctChangeVsPrevDay: number | undefined;
-  if (dateIdx > 0 && avgSpreadPct !== undefined) {
-    const prevRows = getCommoditySpreadRows(DATES[dateIdx - 1], metric, visibleMandiCodes);
-    if (prevRows.length) {
-      const prevAvg = prevRows.reduce((sum, r) => sum + r.spreadPct, 0) / prevRows.length;
-      avgSpreadPctChangeVsPrevDay = avgSpreadPct - prevAvg;
-    }
+  if (prevDayRows?.length && avgSpreadPct !== undefined) {
+    const prevAvg = prevDayRows.reduce((sum, r) => sum + r.spreadPct, 0) / prevDayRows.length;
+    avgSpreadPctChangeVsPrevDay = avgSpreadPct - prevAvg;
   }
 
   let mandisReporting = 0;
-  for (const mandi of MANDIS) {
-    if (!visibleMandiCodes.has(mandi.code)) continue;
-    const reportedToday = COMMODITIES.some((c) => {
-      const r = resolvePrice(mandi.code, c.id, date);
-      return r && !r.isFallback;
-    });
-    if (reportedToday) mandisReporting++;
+  for (const code of visibleMandiCodes) {
+    if (freshMarketIds.has(code)) mandisReporting++;
   }
 
   return {
@@ -109,80 +224,75 @@ export function getMarketStats(date: string, metric: Metric, visibleMandiCodes: 
     avgSpreadPct,
     avgSpreadPctChangeVsPrevDay,
     commoditiesTracked: rows.length,
-    totalCommodities: COMMODITIES.length,
+    totalCommodities,
     mandisReporting,
     totalMandis: visibleMandiCodes.size,
   };
 }
 
-/** Day-by-day average price across the mock week, for the standalone Price Trends panel. */
-export function getCommodityAvgPriceTrend(commodityId: string, metric: Metric, visibleMandiCodes: Set<string>): (number | null)[] {
-  return DATES.map((date) => {
-    const prices = resolvePricesForCommodity(commodityId, date)
-      .filter((r) => r.resolved && visibleMandiCodes.has(r.mandi.code))
-      .map((r) => r.resolved!.record[metric]);
-    if (!prices.length) return null;
-    return prices.reduce((sum, p) => sum + p, 0) / prices.length;
-  });
+/** market_ids with at least one 'fresh' (reported today) price row, across every commodity. */
+export function getFreshMarketIds(pricesByCommodity: Record<string, ApiPriceRow[]>): Set<string> {
+  const ids = new Set<string>();
+  for (const rows of Object.values(pricesByCommodity)) {
+    for (const row of rows) {
+      if (row.status === 'fresh') ids.add(String(row.market_id));
+    }
+  }
+  return ids;
 }
 
 export interface DailyBreakdownRow {
   date: string;
-  avgModal: number | null;
-  avgMean: number | null;
-  avgMedian: number | null;
+  avgPrice: number | null;
   low: number | null;
   high: number | null;
   mandisReporting: number;
 }
 
-/** Full day-by-day price history for a commodity — modal/mean/median averages, the low-high range across visible mandis, and how many actually reported that day. Feeds the Price History panel's table. */
-export function getCommodityDailyBreakdown(commodityId: string, visibleMandiCodes: Set<string>): DailyBreakdownRow[] {
-  return DATES.map((date) => {
-    const rows = resolvePricesForCommodity(commodityId, date).filter((r) => r.resolved && visibleMandiCodes.has(r.mandi.code));
-    if (!rows.length) {
-      return { date, avgModal: null, avgMean: null, avgMedian: null, low: null, high: null, mandisReporting: 0 };
+/** Day-by-day breakdown for a commodity from its raw archive history -- as
+ * many days as the archive actually has (grows over time; there's no way to
+ * backfill from the live API). */
+export function getCommodityDailyBreakdown(
+  history: ApiHistoryRow[],
+  mandiByMarketId: Map<string, Mandi>,
+  visibleMandiCodes: Set<string>,
+  dates: string[],
+  metric: Metric,
+): DailyBreakdownRow[] {
+  const field = metric === 'min' ? 'min_price_normalized' : metric === 'max' ? 'max_price_normalized' : 'modal_price_normalized';
+
+  const byDate = new Map<string, ApiHistoryRow[]>();
+  for (const row of history) {
+    const mandi = mandiByMarketId.get(String(row.market_id));
+    if (!mandi || !visibleMandiCodes.has(mandi.code)) continue;
+    const list = byDate.get(row.arrival_date) ?? [];
+    list.push(row);
+    byDate.set(row.arrival_date, list);
+  }
+
+  return dates.map((date) => {
+    const rows = byDate.get(date) ?? [];
+    if (!rows.length) return { date, avgPrice: null, low: null, high: null, mandisReporting: 0 };
+
+    const byMarket = new Map<number, number[]>();
+    for (const row of rows) {
+      const list = byMarket.get(row.market_id) ?? [];
+      list.push(row[field]);
+      byMarket.set(row.market_id, list);
     }
-    const avg = (values: number[]) => values.reduce((sum, v) => sum + v, 0) / values.length;
-    const modals = rows.map((r) => r.resolved!.record.modal);
-    const means = rows.map((r) => r.resolved!.record.mean);
-    const medians = rows.map((r) => r.resolved!.record.median);
+    const marketPrices = Array.from(byMarket.values()).map((values) => values.reduce((a, b) => a + b, 0) / values.length);
+    const avgPrice = marketPrices.reduce((a, b) => a + b, 0) / marketPrices.length;
+
     return {
       date,
-      avgModal: avg(modals),
-      avgMean: avg(means),
-      avgMedian: avg(medians),
-      low: Math.min(...modals),
-      high: Math.max(...modals),
-      mandisReporting: rows.filter((r) => !r.resolved!.isFallback).length,
+      avgPrice,
+      low: Math.min(...marketPrices),
+      high: Math.max(...marketPrices),
+      mandisReporting: byMarket.size,
     };
   });
 }
 
-export type ReliabilityTier = 'Reliable' | 'Moderate' | 'Volatile';
-
-/** Combines a mandi's reporting consistency with its price volatility for a commodity into one trust signal. */
-export function getReliability(mandiCode: string, commodityId: string): { tier: ReliabilityTier; coefficientOfVariation: number | undefined } {
-  const mandi = MANDIS.find((m) => m.code === mandiCode)!;
-  const series = weekSeries(mandiCode, commodityId)
-    .filter((r): r is NonNullable<typeof r> => !!r && !r.isFallback)
-    .map((r) => r.record.modal);
-
-  let cov: number | undefined;
-  if (series.length >= 2) {
-    const mean = series.reduce((a, b) => a + b, 0) / series.length;
-    const variance = series.reduce((a, b) => a + (b - mean) ** 2, 0) / series.length;
-    cov = Math.sqrt(variance) / mean;
-  }
-
-  let tier: ReliabilityTier;
-  if (mandi.reportingTier === 'weak' || (cov !== undefined && cov > 0.12)) tier = 'Volatile';
-  else if (mandi.reportingTier === 'moderate' || (cov !== undefined && cov > 0.06)) tier = 'Moderate';
-  else tier = 'Reliable';
-
-  return { tier, coefficientOfVariation: cov };
-}
-
-export function resolveOne(mandiCode: string, commodityId: string, date: string) {
-  return resolvePrice(mandiCode, commodityId, date);
+export function getCommodityAvgPriceTrend(breakdown: DailyBreakdownRow[]): (number | null)[] {
+  return breakdown.map((r) => r.avgPrice);
 }

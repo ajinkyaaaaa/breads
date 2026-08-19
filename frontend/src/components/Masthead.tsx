@@ -1,25 +1,44 @@
 import { useEffect, useRef, useState } from 'react';
-import { DATES } from '../data/mockPrices';
-import { formatOrdinalDayMonth, formatWeekdayShort } from '../lib/format';
+import { formatOrdinalDayMonth, formatSyncedAt, formatWeekdayShort } from '../lib/format';
 import { Icon } from './Icon';
 import aarhatLogo from '../assets/aarhat-logo.png';
 
 interface MastheadProps {
-  date: string;
-  onDateChange: (date: string) => void;
+  /** Every date the archive has data for, ascending. Grows by one each day the ingest pipeline runs. */
+  dates: string[];
+  asOf: string | null;
+  onAsOfChange: (date: string) => void;
+  pendingGeocodeCount: number;
+  onOpenLocationEditor: () => void;
+  /** ISO timestamp of the last successful ingest write, or null before the first sync-status fetch resolves. */
+  lastSyncedAt: string | null;
+  /** True when the newest archived day is older than the viewer's real "today" -- highlights the resync button. */
+  isStale: boolean;
+  syncing: boolean;
+  onRefresh: () => void;
 }
 
 const DAY_PRICES_URL = 'https://agmarknet.gov.in/home';
 const INTRADAY_SOURCE = 'eNAM app/website scraping';
 
-export function Masthead({ date, onDateChange }: MastheadProps) {
-  const index = DATES.indexOf(date);
+export function Masthead({
+  dates,
+  asOf,
+  onAsOfChange,
+  pendingGeocodeCount,
+  onOpenLocationEditor,
+  lastSyncedAt,
+  isStale,
+  syncing,
+  onRefresh,
+}: MastheadProps) {
+  const index = asOf ? dates.indexOf(asOf) : -1;
   const atEarliest = index <= 0;
-  const atLatest = index >= DATES.length - 1;
+  const atLatest = index === -1 || index >= dates.length - 1;
 
   function step(delta: number) {
-    const next = DATES[index + delta];
-    if (next) onDateChange(next);
+    const next = dates[index + delta];
+    if (next) onAsOfChange(next);
   }
 
   const [openMenu, setOpenMenu] = useState<'day' | 'intraday' | null>(null);
@@ -43,7 +62,7 @@ export function Masthead({ date, onDateChange }: MastheadProps) {
         <div className="h-6 w-px bg-wheat/15" />
         <div className="flex items-baseline gap-2">
           <span className="font-display text-lg font-bold uppercase tracking-tight text-wheat">Mandi</span>
-          <span className="font-display text-lg font-bold uppercase tracking-tight text-amber">// Nagpur</span>
+          <span className="font-display text-lg font-bold uppercase tracking-tight text-amber">// Maharashtra</span>
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-end gap-3 gap-y-2">
@@ -95,7 +114,41 @@ export function Masthead({ date, onDateChange }: MastheadProps) {
           </div>
         </div>
 
-        <span className="rounded-sm bg-surface2 px-2 py-1 text-[10px] uppercase tracking-wide text-dim">Mock Data</span>
+        {pendingGeocodeCount > 0 && (
+          <button
+            onClick={onOpenLocationEditor}
+            className="flex items-center gap-1.5 rounded-sm border border-amber/40 bg-amber/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide text-amber transition-colors duration-150 hover:bg-amber/20"
+          >
+            <Icon name="pin_drop" size={13} />
+            {pendingGeocodeCount} need{pendingGeocodeCount === 1 ? 's' : ''} location
+          </button>
+        )}
+        <span className="rounded-sm bg-sage-dim px-2 py-1 text-[10px] uppercase tracking-wide text-sage">Live</span>
+
+        {lastSyncedAt && (
+          <span className="hidden text-[10px] text-dim sm:inline" title={new Date(lastSyncedAt).toString()}>
+            Synced {formatSyncedAt(lastSyncedAt)}
+          </span>
+        )}
+
+        <button
+          onClick={onRefresh}
+          disabled={syncing}
+          title={
+            isStale
+              ? 'Dashboard is showing an older day than today — resync for the latest prices'
+              : 'Resync with the live source'
+          }
+          className={`flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${
+            isStale
+              ? 'animate-pulse border-rust/50 bg-rust/10 text-rust hover:bg-rust/20'
+              : 'border-wheat/15 bg-surface text-dim hover:border-amber/30 hover:text-wheat'
+          }`}
+        >
+          <Icon name="refresh" size={13} className={syncing ? 'animate-spin' : ''} />
+          {isStale ? 'Resync' : 'Refresh'}
+        </button>
+
         <div className="flex items-center gap-0.5 rounded-full bg-amber py-1 pl-1.5 pr-1 shadow-[0_0_0_1px_rgba(232,163,61,0.3),0_2px_8px_rgba(232,163,61,0.35)]">
           <button
             onClick={() => step(-1)}
@@ -107,9 +160,7 @@ export function Masthead({ date, onDateChange }: MastheadProps) {
           </button>
           <div className="flex items-center gap-1.5 px-0.5 font-mono text-[12px] font-semibold tabular-nums text-ink">
             <Icon name="calendar_today" size={12} className="text-ink/70" />
-            <span>
-              {formatWeekdayShort(date)}, {formatOrdinalDayMonth(date)}
-            </span>
+            <span>{asOf ? `${formatWeekdayShort(asOf)}, ${formatOrdinalDayMonth(asOf)}` : '—'}</span>
           </div>
           <button
             onClick={() => step(1)}

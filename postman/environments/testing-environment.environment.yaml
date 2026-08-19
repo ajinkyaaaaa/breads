@@ -1,0 +1,6 @@
+name: testing-environment
+values:
+  - key: gov_api_key
+    value: ""
+    type: secret
+    enabled: true

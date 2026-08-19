@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
-import { COMMODITIES } from '../data/commodities';
 import type { CommoditySpreadRow, SpreadPoint } from '../lib/analytics';
 import { haversineKm } from '../lib/geo';
-import { formatKm, formatPct, formatRupees } from '../lib/format';
+import { formatKm, formatPct, formatRate, formatRupees, unitSuffix } from '../lib/format';
 import { useAnimatedNumber } from '../lib/useAnimatedNumber';
 import { Icon } from './Icon';
+import type { PriceUnit } from '../data/types';
 
 interface RouteJourneyProps {
   row: CommoditySpreadRow;
+  priceUnit: PriceUnit;
 }
 
 // ₹, mock per-quintal-per-km freight rate — so a bigger load genuinely costs more to
@@ -77,6 +78,7 @@ function PointCard({
   onQuantityChange,
   total,
   accent,
+  priceUnit,
 }: {
   label: string;
   point: SpreadPoint;
@@ -85,6 +87,7 @@ function PointCard({
   onQuantityChange?: (q: number) => void;
   total: number;
   accent: 'wheat' | 'sage';
+  priceUnit: PriceUnit;
 }) {
   const accentClass = accent === 'wheat' ? 'text-wheat' : 'text-sage';
   const editable = !!onQuantityChange;
@@ -109,9 +112,15 @@ function PointCard({
       </div>
 
       <div className="mt-2.5 flex items-center justify-between border-t border-wheat/8 pt-2 text-[11px]">
-        <span className="text-dim">₹/Qtl</span>
-        <span className="font-mono text-[13px] font-semibold tabular-nums text-wheat">{formatRupees(point.price)}</span>
+        <span className="text-dim">₹{unitSuffix(priceUnit)}</span>
+        <span className="font-mono text-[13px] font-semibold tabular-nums text-wheat">{formatRate(point.price, priceUnit)}</span>
       </div>
+      {point.unit === 'kg' && point.rawPrice !== undefined && (
+        <div className="mt-1 flex items-center gap-1 text-[10px] text-amber" title="Source reported this as ₹/kg, not ₹/quintal — auto-corrected ×100 for calculations">
+          <Icon name="warning" size={11} />
+          adj. from {formatRupees(point.rawPrice)}/kg
+        </div>
+      )}
 
       <div className="mt-1.5 flex items-center justify-between text-[11px]">
         <span className="flex items-center gap-1 text-dim">
@@ -175,9 +184,8 @@ function PointCard({
   );
 }
 
-export function RouteJourney({ row }: RouteJourneyProps) {
-  const commodity = COMMODITIES.find((c) => c.id === row.commodityId)!;
-  const [quantity, setQuantity] = useState(commodity.defaultLotQuintals);
+export function RouteJourney({ row, priceUnit }: RouteJourneyProps) {
+  const [quantity, setQuantity] = useState(row.lotQuantity);
 
   const buyPrice = row.min.price;
   const sellPrice = row.max.price;
@@ -213,6 +221,7 @@ export function RouteJourney({ row }: RouteJourneyProps) {
           onQuantityChange={setQuantity}
           total={animatedTotalA}
           accent="wheat"
+          priceUnit={priceUnit}
         />
 
         <div className="flex w-full shrink-0 flex-col items-center justify-center gap-1 lg:w-20">
@@ -241,6 +250,7 @@ export function RouteJourney({ row }: RouteJourneyProps) {
           quantity={quantity}
           total={animatedTotalB}
           accent="sage"
+          priceUnit={priceUnit}
         />
       </div>
 
@@ -257,7 +267,7 @@ export function RouteJourney({ row }: RouteJourneyProps) {
         <div className="grid grid-cols-[1fr_54px_88px_88px] gap-2 pt-2 text-[8px] font-semibold uppercase tracking-wide text-dim/70">
           <div>Description</div>
           <div className="text-right">Qty</div>
-          <div className="text-right">Rate</div>
+          <div className="text-right">Rate{unitSuffix(priceUnit)}</div>
           <div className="text-right">Amount</div>
         </div>
 
@@ -266,7 +276,7 @@ export function RouteJourney({ row }: RouteJourneyProps) {
             description={`${row.commodityName} · bought`}
             sub={row.min.mandi.name}
             qty={`${quantity} qtl`}
-            rate={formatRupees(buyPrice)}
+            rate={formatRate(buyPrice, priceUnit)}
             amount={formatRupees(animatedTotalA)}
             amountClassName="text-wheat"
           />
@@ -287,7 +297,7 @@ export function RouteJourney({ row }: RouteJourneyProps) {
             description={`${row.commodityName} · sold`}
             sub={row.max.mandi.name}
             qty={`${quantity} qtl`}
-            rate={formatRupees(sellPrice)}
+            rate={formatRate(sellPrice, priceUnit)}
             amount={formatRupees(animatedTotalB)}
             amountClassName="text-sage"
           />

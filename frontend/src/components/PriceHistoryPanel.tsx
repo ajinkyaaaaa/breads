@@ -1,16 +1,19 @@
 import { useId } from 'react';
-import { COMMODITIES } from '../data/commodities';
-import { DATES } from '../data/mockPrices';
-import { getCommodityAvgPriceTrend, getCommodityDailyBreakdown } from '../lib/analytics';
-import { formatDate, formatRupees } from '../lib/format';
+import type { DailyBreakdownRow } from '../lib/analytics';
+import type { toCommodity } from '../lib/analytics';
+import { formatDate, formatDisplayRupees, formatRate, toDisplayPrice, unitSuffix } from '../lib/format';
 import { Icon } from './Icon';
-import type { Metric } from '../data/types';
+import type { Metric, PriceUnit } from '../data/types';
 
 interface PriceHistoryPanelProps {
-  commodityId: string;
+  commodities: ReturnType<typeof toCommodity>[];
+  commodityId: string | null;
   onCommodityChange: (id: string) => void;
   metric: Metric;
-  visibleMandiCodes: Set<string>;
+  dates: string[];
+  trend: (number | null)[];
+  breakdown: DailyBreakdownRow[];
+  priceUnit: PriceUnit;
 }
 
 const CHART_W = 520;
@@ -19,12 +22,23 @@ const PAD_TOP = 22;
 const PAD_BOTTOM = 20;
 const PAD_X = 10;
 
-export function PriceHistoryPanel({ commodityId, onCommodityChange, metric, visibleMandiCodes }: PriceHistoryPanelProps) {
+export function PriceHistoryPanel({
+  commodities,
+  commodityId,
+  onCommodityChange,
+  metric,
+  dates,
+  trend,
+  breakdown,
+  priceUnit,
+}: PriceHistoryPanelProps) {
   const gradientId = useId();
-  const trend = getCommodityAvgPriceTrend(commodityId, metric, visibleMandiCodes);
-  const breakdown = getCommodityDailyBreakdown(commodityId, visibleMandiCodes);
 
-  const nums = trend.filter((v): v is number => v !== null);
+  // trend/breakdown are always computed upstream in Rs/quintal (the canonical
+  // unit analytics.ts ranks on) -- convert here, at render time only, for the
+  // global unit toggle.
+  const displayTrend = trend.map((v) => (v === null ? null : toDisplayPrice(v, priceUnit)));
+  const nums = displayTrend.filter((v): v is number => v !== null);
   const hasTrend = nums.length >= 2;
   const min = nums.length ? Math.min(...nums) : 0;
   const max = nums.length ? Math.max(...nums) : 0;
@@ -33,9 +47,9 @@ export function PriceHistoryPanel({ commodityId, onCommodityChange, metric, visi
   const plotW = CHART_W - PAD_X * 2;
   const plotH = CHART_H - PAD_TOP - PAD_BOTTOM;
   const range = max - min || 1;
-  const step = plotW / (trend.length - 1);
+  const step = displayTrend.length > 1 ? plotW / (displayTrend.length - 1) : 0;
 
-  const points = trend.map((v, i) => ({
+  const points = displayTrend.map((v, i) => ({
     x: PAD_X + i * step,
     y: v === null ? null : PAD_TOP + plotH - ((v - min) / range) * plotH,
     v,
@@ -52,11 +66,11 @@ export function PriceHistoryPanel({ commodityId, onCommodityChange, metric, visi
         <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-dim">Price History &amp; Trend</div>
         <div className="relative">
           <select
-            value={commodityId}
+            value={commodityId ?? ''}
             onChange={(e) => onCommodityChange(e.target.value)}
             className="appearance-none rounded-sm border border-wheat/10 bg-surface py-1.5 pl-3 pr-7 text-[12px] text-wheat outline-none transition-colors duration-150 focus:border-amber"
           >
-            {COMMODITIES.map((c) => (
+            {commodities.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
@@ -67,21 +81,23 @@ export function PriceHistoryPanel({ commodityId, onCommodityChange, metric, visi
       </div>
 
       {!hasTrend ? (
-        <div className="flex flex-1 items-center justify-center text-sm text-dim">Not enough data for a trend.</div>
+        <div className="flex flex-1 items-center justify-center text-sm text-dim">
+          Not enough archive history yet for a trend — the archive grows by one day each time the ingest pipeline runs.
+        </div>
       ) : (
         <>
           <div className="mb-1 flex shrink-0 items-center gap-5 text-[11px]">
             <span className="text-dim">
-              Low <span className="font-mono font-semibold text-wheat">{formatRupees(min)}</span>
+              Low <span className="font-mono font-semibold text-wheat">{formatDisplayRupees(min, priceUnit)}</span>
             </span>
             <span className="text-dim">
-              Avg <span className="font-mono font-semibold text-wheat">{formatRupees(avg)}</span>
+              Avg <span className="font-mono font-semibold text-wheat">{formatDisplayRupees(avg, priceUnit)}</span>
             </span>
             <span className="text-dim">
-              High <span className="font-mono font-semibold text-wheat">{formatRupees(max)}</span>
+              High <span className="font-mono font-semibold text-wheat">{formatDisplayRupees(max, priceUnit)}</span>
             </span>
             <span className="text-dim">
-              · avg {metric} price across visible mandis
+              · avg {metric} price{unitSuffix(priceUnit)} across visible mandis
             </span>
           </div>
 
@@ -106,11 +122,11 @@ export function PriceHistoryPanel({ commodityId, onCommodityChange, metric, visi
               <g key={i}>
                 <circle cx={p.x} cy={p.y} r={2.8} fill="#D9CFB8" />
                 <text x={p.x} y={p.y - 8} textAnchor="middle" fontSize="9" fill="#D9CFB8" fontFamily="'IBM Plex Mono', monospace">
-                  {Math.round(p.v).toLocaleString('en-IN')}
+                  {priceUnit === 'kg' ? p.v.toFixed(1) : Math.round(p.v).toLocaleString('en-IN')}
                 </text>
               </g>
             ))}
-            {DATES.map((d, i) => (
+            {dates.map((d, i) => (
               <text
                 key={d}
                 x={PAD_X + i * step}
@@ -126,22 +142,19 @@ export function PriceHistoryPanel({ commodityId, onCommodityChange, metric, visi
           </svg>
 
           <div className="mt-3 flex-1 overflow-y-auto">
-            <div className="grid grid-cols-[1fr_74px_74px_74px_60px] gap-2 border-b border-wheat/10 pb-1.5 text-[9px] font-semibold uppercase tracking-wide text-dim">
+            <div className="grid grid-cols-[1fr_74px_74px_60px] gap-2 border-b border-wheat/10 pb-1.5 text-[9px] font-semibold uppercase tracking-wide text-dim">
               <div>Date</div>
-              <div className="text-right">Modal</div>
-              <div className="text-right">Mean</div>
-              <div className="text-right">Median</div>
+              <div className="text-right">Avg{unitSuffix(priceUnit)}</div>
+              <div className="text-right">Low–High</div>
               <div className="text-right">Mandis</div>
             </div>
             {breakdown.map((row) => (
-              <div
-                key={row.date}
-                className="grid grid-cols-[1fr_74px_74px_74px_60px] gap-2 border-b border-wheat/5 py-1.5 font-mono text-[12px] tabular-nums"
-              >
+              <div key={row.date} className="grid grid-cols-[1fr_74px_74px_60px] gap-2 border-b border-wheat/5 py-1.5 font-mono text-[12px] tabular-nums">
                 <div className="text-wheat">{formatDate(row.date)}</div>
-                <div className="text-right text-wheat">{row.avgModal !== null ? formatRupees(row.avgModal) : '—'}</div>
-                <div className="text-right text-dim">{row.avgMean !== null ? formatRupees(row.avgMean) : '—'}</div>
-                <div className="text-right text-dim">{row.avgMedian !== null ? formatRupees(row.avgMedian) : '—'}</div>
+                <div className="text-right text-wheat">{row.avgPrice !== null ? formatRate(row.avgPrice, priceUnit) : '—'}</div>
+                <div className="text-right text-dim">
+                  {row.low !== null && row.high !== null ? `${formatRate(row.low, priceUnit)}–${formatRate(row.high, priceUnit)}` : '—'}
+                </div>
                 <div className="text-right text-dim">{row.mandisReporting}</div>
               </div>
             ))}

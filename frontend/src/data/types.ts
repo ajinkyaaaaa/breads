@@ -1,42 +1,32 @@
 export interface Mandi {
   code: string;
   name: string;
-  /** Hindi/Devanagari rendering of the place name. */
-  nameHi: string;
+  /** Hindi/Devanagari rendering of the place name, when curated. */
+  nameHi?: string;
   taluka: string;
   lat: number;
   lon: number;
-  enamDigital: boolean;
-  /** Commodity this mandi is a known source specialty for (cheaper, higher arrivals). */
-  specialtyCommodityId?: string;
-  /** Smaller/less-digitized mandis get wider price noise and occasional missing days. */
-  reportingTier: 'strong' | 'moderate' | 'weak';
 }
 
 export interface Commodity {
   id: string;
   name: string;
-  /** Hindi rendering of the commodity name. */
-  nameHi: string;
+  /** Hindi rendering of the commodity name, when curated. */
+  nameHi?: string;
   unit: string;
-  /** Illustrative ₹/quintal base range used to seed mock prices — not live data. */
-  baseMin: number;
-  baseMax: number;
-  /** Illustrative typical single-trip trade lot size, in quintals — not sourced, just a reasonable default cargo quantity so KPIs can show a realistic total rather than a bare per-quintal rate. */
+  /** Curated typical single-trip trade lot size, in quintals. Falls back to DEFAULT_LOT_QUINTALS when not yet curated for this commodity. */
   defaultLotQuintals: number;
 }
 
-export interface DailyPrice {
-  mandiCode: string;
-  commodityId: string;
-  /** ISO date, one of the 7 mock days. */
-  date: string;
-  min: number;
-  max: number;
-  modal: number;
-  mean: number;
-  median: number;
-  arrivalQuintals: number;
-}
+export type Metric = 'modal' | 'min' | 'max';
 
-export type Metric = 'modal' | 'mean' | 'median';
+export type PriceStatus = 'fresh' | 'stale' | 'missing';
+
+/** How old a resolved price point is relative to the selected day: reported
+ * today, carried forward from the day before, or older than that. */
+export type Freshness = 'fresh' | 'recent' | 'old';
+
+/** Global display unit for per-unit price rates. Every price is stored and
+ * ranked internally as Rs/quintal (see analytics.ts); this only controls how
+ * rates are presented -- it never touches ranking or totals math. */
+export type PriceUnit = 'quintal' | 'kg';

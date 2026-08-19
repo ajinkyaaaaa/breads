@@ -1,39 +1,54 @@
-import { MANDIS } from '../data/mandis';
-import { DATES } from '../data/mockPrices';
-import { formatDate } from '../lib/format';
-import { Icon } from './Icon';
-import type { Metric } from '../data/types';
+import type { Mandi, Metric, PriceUnit } from '../data/types';
+import { unitConversionTooltip, unitLabel } from '../lib/format';
+import { MandiPicker } from './MandiPicker';
 
 interface ToolbarProps {
-  date: string;
-  onDateChange: (date: string) => void;
+  mandis: Mandi[];
   metric: Metric;
   onMetricChange: (metric: Metric) => void;
+  windowDays: number;
+  onWindowDaysChange: (days: number) => void;
+  priceUnit: PriceUnit;
+  onPriceUnitChange: (unit: PriceUnit) => void;
   visibleMandiCodes: Set<string>;
   onToggleMandi: (code: string) => void;
+  onSetMandiVisibility: (codes: string[], visible: boolean) => void;
   onToggleAllMandis: () => void;
 }
 
-const METRICS: Metric[] = ['modal', 'mean', 'median'];
+const METRICS: Metric[] = ['modal', 'min', 'max'];
+const WINDOW_OPTIONS = [1, 2, 3, 4, 5];
+const PRICE_UNITS: PriceUnit[] = ['quintal', 'kg'];
 
-export function Toolbar({ date, onDateChange, metric, onMetricChange, visibleMandiCodes, onToggleMandi, onToggleAllMandis }: ToolbarProps) {
-  const allVisible = visibleMandiCodes.size === MANDIS.length;
-
+export function Toolbar({
+  mandis,
+  metric,
+  onMetricChange,
+  windowDays,
+  onWindowDaysChange,
+  priceUnit,
+  onPriceUnitChange,
+  visibleMandiCodes,
+  onToggleMandi,
+  onSetMandiVisibility,
+  onToggleAllMandis,
+}: ToolbarProps) {
   return (
-    <div className="flex items-center gap-6 overflow-x-auto border-y border-amber/25 bg-amber/[0.07] px-4 py-1">
+    <div className="mb-1.5 flex items-center gap-6 overflow-x-auto border-y border-amber/25 bg-amber/[0.07] px-4 py-1">
       <div className="flex shrink-0 items-center gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-wide text-amber">Week</span>
-        <div className="flex gap-0.5">
-          {DATES.map((d) => (
+        <span className="text-[10px] font-bold uppercase tracking-wide text-amber" title="How many days back to carry forward a mandi's last reported price if it hasn't reported today">
+          Window
+        </span>
+        <div className="flex gap-0.5 rounded-sm bg-ink p-0.5">
+          {WINDOW_OPTIONS.map((n) => (
             <button
-              key={d}
-              onClick={() => onDateChange(d)}
-              title={formatDate(d)}
-              className={`rounded-sm px-2 py-1 font-mono text-[11px] transition-colors duration-150 ${
-                d === date ? 'bg-amber text-ink' : 'text-dim hover:bg-surface2 hover:text-wheat'
+              key={n}
+              onClick={() => onWindowDaysChange(n)}
+              className={`rounded-sm px-2.5 py-1 text-[11px] font-medium transition-colors duration-150 ${
+                n === windowDays ? 'bg-surface2 text-wheat' : 'text-dim hover:text-wheat'
               }`}
             >
-              {formatDate(d).slice(0, 3)}
+              {n}d
             </button>
           ))}
         </div>
@@ -61,29 +76,32 @@ export function Toolbar({ date, onDateChange, metric, onMetricChange, visibleMan
       <div className="h-4 w-px shrink-0 bg-wheat/10" />
 
       <div className="flex shrink-0 items-center gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-wide text-amber">Mandis</span>
-        <div className="flex shrink-0 gap-1">
-          {MANDIS.map((m) => {
-            const active = visibleMandiCodes.has(m.code);
-            return (
-              <button
-                key={m.code}
-                onClick={() => onToggleMandi(m.code)}
-                title={m.code}
-                className={`flex shrink-0 items-center gap-1 rounded-sm px-2.5 py-1 text-[11px] transition-colors duration-150 ${
-                  active ? 'bg-sage-dim text-sage' : 'text-dim/60 hover:text-dim'
-                }`}
-              >
-                {active && <Icon name="check" size={12} className="text-sage" />}
-                {m.name}
-              </button>
-            );
-          })}
+        <span className="text-[10px] font-bold uppercase tracking-wide text-amber">Unit</span>
+        <div className="flex gap-0.5 rounded-sm bg-ink p-0.5">
+          {PRICE_UNITS.map((u) => (
+            <button
+              key={u}
+              onClick={() => onPriceUnitChange(u)}
+              title={unitConversionTooltip(u)}
+              className={`rounded-sm px-2.5 py-1 text-[11px] font-medium transition-colors duration-150 ${
+                u === priceUnit ? 'bg-surface2 text-wheat' : 'text-dim hover:text-wheat'
+              }`}
+            >
+              {unitLabel(u)}
+            </button>
+          ))}
         </div>
-        <button onClick={onToggleAllMandis} className="ml-1 shrink-0 text-[10px] text-amber transition-colors duration-150 hover:text-wheat">
-          {allVisible ? 'hide all' : 'show all'}
-        </button>
       </div>
+
+      <div className="h-4 w-px shrink-0 bg-wheat/10" />
+
+      <MandiPicker
+        mandis={mandis}
+        visibleMandiCodes={visibleMandiCodes}
+        onToggleMandi={onToggleMandi}
+        onSetMandiVisibility={onSetMandiVisibility}
+        onToggleAllMandis={onToggleAllMandis}
+      />
     </div>
   );
 }

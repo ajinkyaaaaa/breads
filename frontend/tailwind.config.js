@@ -32,9 +32,19 @@ export default {
           '0%': { transform: 'scale(0.95)', boxShadow: '0 0 0 0 rgba(217,207,184,0.35)' },
           '100%': { transform: 'scale(1)', boxShadow: '0 0 0 4px rgba(217,207,184,0)' },
         },
+        'orb-breathe': {
+          '0%, 100%': { transform: 'scale(0.94)', opacity: '0.85' },
+          '50%': { transform: 'scale(1.07)', opacity: '1' },
+        },
+        'orb-shimmer': {
+          '0%': { transform: 'rotate(0deg)' },
+          '100%': { transform: 'rotate(360deg)' },
+        },
       },
       animation: {
         'kpi-select': 'kpi-select 160ms cubic-bezier(0.16, 1, 0.3, 1)',
+        'orb-breathe': 'orb-breathe 2.4s ease-in-out infinite',
+        'orb-shimmer': 'orb-shimmer 5s linear infinite',
       },
     },
   },

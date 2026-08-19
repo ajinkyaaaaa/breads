@@ -21,6 +21,7 @@ interface MastheadProps {
 
 const DAY_PRICES_URL = 'https://agmarknet.gov.in/home';
 const INTRADAY_SOURCE = 'eNAM app/website scraping';
+const SYNC_FRESH_WINDOW_MS = 12 * 60 * 60 * 1000;
 
 export function Masthead({
   dates,
@@ -37,6 +38,10 @@ export function Masthead({
   const index = asOf ? dates.indexOf(asOf) : -1;
   const atEarliest = index <= 0;
   const atLatest = index === -1 || index >= dates.length - 1;
+
+  // "Live" reads as genuinely alive only if the archive was actually written
+  // to recently -- an old sync is real data, just not live data anymore.
+  const syncedRecently = lastSyncedAt !== null && Date.now() - new Date(lastSyncedAt).getTime() < SYNC_FRESH_WINDOW_MS;
 
   function step(delta: number) {
     const next = dates[index + delta];
@@ -125,11 +130,24 @@ export function Masthead({
             {pendingGeocodeCount} need{pendingGeocodeCount === 1 ? 's' : ''} location
           </button>
         )}
-        <span className="rounded-sm bg-sage-dim px-2 py-1 text-[10px] uppercase tracking-wide text-sage">Live</span>
+        <span
+          title={syncedRecently ? 'Data fetched within the last 12 hours' : 'Last fetch was over 12 hours ago — resync for current prices'}
+          className={
+            syncedRecently
+              ? 'animate-neon-flicker rounded-sm border border-[#39FF14]/40 bg-black px-2 py-1 text-[10px] uppercase tracking-wide text-[#39FF14] drop-shadow-[0_0_3px_#39FF14]'
+              : 'rounded-sm border border-dim/30 bg-black px-2 py-1 text-[10px] uppercase tracking-wide text-dim'
+          }
+        >
+          Live
+        </span>
 
         {lastSyncedAt && (
-          <span className="hidden text-[10px] text-dim sm:inline" title={new Date(lastSyncedAt).toString()}>
+          <span
+            className={`hidden text-[10px] sm:inline ${syncedRecently ? 'text-dim' : 'text-rust'}`}
+            title={new Date(lastSyncedAt).toString()}
+          >
             Synced {formatSyncedAt(lastSyncedAt)}
+            {syncedRecently ? ' · fetched within last 12h' : ' — over 12h old, refresh for latest'}
           </span>
         )}
 

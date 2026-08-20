@@ -13,8 +13,9 @@ const LABEL: Record<Freshness, string> = {
 
 const NEON_GREEN = '#39FF14';
 const WHITE = '#FFFFFF';
+const NEON_PURPLE = '#C724FF';
 
-/** Small black square status badge with a white border: neon-green tick (today), white tilde (carried forward from yesterday), white burst (older than 2 days). */
+/** Small black square status badge with a white border: neon-green tick (today), neon-purple tilde (carried forward from yesterday), white burst (older than 2 days). */
 export function FreshnessBadge({ tier, size = 17 }: FreshnessBadgeProps) {
   return (
     <span
@@ -34,7 +35,14 @@ export function FreshnessBadge({ tier, size = 17 }: FreshnessBadgeProps) {
           />
         </svg>
       )}
-      {tier === 'recent' && <span className="text-[9px] font-bold leading-none text-white">~</span>}
+      {tier === 'recent' && (
+        <span
+          className="font-bold leading-none"
+          style={{ fontSize: size * 0.75, color: NEON_PURPLE, filter: `drop-shadow(0 0 3px ${NEON_PURPLE})` }}
+        >
+          ~
+        </span>
+      )}
       {tier === 'old' && (
         <svg width={size * 0.62} height={size * 0.62} viewBox="0 0 24 24" fill="none">
           {Array.from({ length: 8 }).map((_, i) => (

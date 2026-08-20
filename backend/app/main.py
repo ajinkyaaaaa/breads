@@ -98,6 +98,89 @@ def update_market_location(market_id: int, update: MarketLocationUpdate):
     return row
 
 
+@protected.get("/api/markets/{market_id}/contacts")
+def list_contacts(market_id: int):
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, market_id, name, role, phone, email, notes, created_at, updated_at
+            FROM mandi_contacts
+            WHERE market_id = %s
+            ORDER BY created_at
+            """,
+            (market_id,),
+        )
+        return cur.fetchall()
+
+
+class ContactCreate(BaseModel):
+    name: str
+    role: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    notes: str | None = None
+
+
+@protected.post("/api/markets/{market_id}/contacts")
+def create_contact(market_id: int, body: ContactCreate):
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO mandi_contacts (market_id, name, role, phone, email, notes)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id, market_id, name, role, phone, email, notes, created_at, updated_at
+            """,
+            (market_id, body.name, body.role, body.phone, body.email, body.notes),
+        )
+        row = cur.fetchone()
+        conn.commit()
+    return row
+
+
+class ContactUpdate(BaseModel):
+    name: str | None = None
+    role: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    notes: str | None = None
+
+
+@protected.patch("/api/contacts/{contact_id}")
+def update_contact(contact_id: int, body: ContactUpdate):
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE mandi_contacts
+            SET name = COALESCE(%s, name),
+                role = COALESCE(%s, role),
+                phone = COALESCE(%s, phone),
+                email = COALESCE(%s, email),
+                notes = COALESCE(%s, notes),
+                updated_at = now()
+            WHERE id = %s
+            RETURNING id, market_id, name, role, phone, email, notes, created_at, updated_at
+            """,
+            (body.name, body.role, body.phone, body.email, body.notes, contact_id),
+        )
+        row = cur.fetchone()
+        conn.commit()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    return row
+
+
+@protected.delete("/api/contacts/{contact_id}", status_code=204)
+def delete_contact(contact_id: int):
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM mandi_contacts WHERE id = %s RETURNING id", (contact_id,))
+        row = cur.fetchone()
+        conn.commit()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Contact not found")
+
+
 @protected.get("/api/prices")
 def get_prices(commodity_id: int, window_days: int = 1, as_of: date | None = None):
     if window_days < 1 or window_days > MAX_WINDOW_DAYS:

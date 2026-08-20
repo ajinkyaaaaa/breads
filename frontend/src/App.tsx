@@ -4,14 +4,11 @@ import {
   fetchArchiveDates,
   fetchCommodities,
   fetchMarkets,
-  fetchPriceHistory,
   fetchSyncStatus,
   triggerIngest,
   type ApiPriceRow,
 } from './lib/api';
 import {
-  getCommodityAvgPriceTrend,
-  getCommodityDailyBreakdown,
   getCommoditySpreadRows,
   getFreshMarketIds,
   getMarketStats,
@@ -25,7 +22,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { Masthead } from './components/Masthead';
 import { StatStrip } from './components/StatStrip';
 import { TopOpportunities } from './components/TopOpportunities';
-import { PriceHistoryPanel } from './components/PriceHistoryPanel';
+import { MandiInfoPanel } from './components/MandiInfoPanel';
 import { Toolbar } from './components/Toolbar';
 import { RouteJourney } from './components/RouteJourney';
 import { LocationEditor } from './components/LocationEditor';
@@ -66,8 +63,6 @@ export default function App() {
   const [pricesByCommodity, setPricesByCommodity] = useState<Record<string, ApiPriceRow[]>>({});
 
   const [selectedCommodityId, setSelectedCommodityId] = useState<string | null>(null);
-  const [trendCommodityId, setTrendCommodityId] = useState<string | null>(null);
-  const [trendHistory, setTrendHistory] = useState<Awaited<ReturnType<typeof fetchPriceHistory>>>([]);
 
   const [locationEditorOpen, setLocationEditorOpen] = useState(false);
 
@@ -177,21 +172,7 @@ export default function App() {
 
   useEffect(() => {
     if (!selectedCommodityId && rows[0]) setSelectedCommodityId(rows[0].commodityId);
-    if (!trendCommodityId && rows[0]) setTrendCommodityId(rows[0].commodityId);
-  }, [rows, selectedCommodityId, trendCommodityId]);
-
-  useEffect(() => {
-    if (!trendCommodityId) return;
-    fetchPriceHistory(trendCommodityId, 30)
-      .then(setTrendHistory)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load history'));
-  }, [trendCommodityId]);
-
-  const breakdown = useMemo(
-    () => getCommodityDailyBreakdown(trendHistory, mandiByMarketId, visibleMandiCodes, dates, metric),
-    [trendHistory, mandiByMarketId, visibleMandiCodes, dates, metric],
-  );
-  const trend = useMemo(() => getCommodityAvgPriceTrend(breakdown), [breakdown]);
+  }, [rows, selectedCommodityId]);
 
   const activeRow = rows.find((r) => r.commodityId === selectedCommodityId) ?? rows[0];
 
@@ -321,16 +302,11 @@ export default function App() {
           )}
         </div>
         <div className="border-t border-wheat/10 lg:min-h-0 lg:border-t-0">
-          <PriceHistoryPanel
-            commodities={commodities}
-            commodityId={trendCommodityId}
-            onCommodityChange={setTrendCommodityId}
-            metric={metric}
-            dates={dates}
-            trend={trend}
-            breakdown={breakdown}
-            priceUnit={priceUnit}
-          />
+          {activeRow ? (
+            <MandiInfoPanel row={activeRow} tierIndex={tierByCommodity[activeRow.commodityId] ?? 0} />
+          ) : (
+            <div className="flex h-40 items-center justify-center text-sm text-dim lg:h-full">No data for this day yet.</div>
+          )}
         </div>
       </div>
 

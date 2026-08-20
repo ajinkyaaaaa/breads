@@ -139,3 +139,52 @@ export async function updateMarketLocation(
   await checkOk(res, `PATCH /api/markets/${id}`);
   return res.json();
 }
+
+export interface ApiContact {
+  id: number;
+  market_id: number;
+  name: string;
+  role: string | null;
+  phone: string | null;
+  email: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContactInput {
+  name: string;
+  role?: string;
+  phone?: string;
+  email?: string;
+  notes?: string;
+}
+
+export function fetchContacts(marketId: number): Promise<ApiContact[]> {
+  return getJSON(`/api/markets/${marketId}/contacts`);
+}
+
+export async function createContact(marketId: number, body: ContactInput): Promise<ApiContact> {
+  const res = await fetch(`${API_BASE}/api/markets/${marketId}/contacts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  await checkOk(res, `POST /api/markets/${marketId}/contacts`);
+  return res.json();
+}
+
+export async function updateContact(id: number, body: Partial<ContactInput>): Promise<ApiContact> {
+  const res = await fetch(`${API_BASE}/api/contacts/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  await checkOk(res, `PATCH /api/contacts/${id}`);
+  return res.json();
+}
+
+export async function deleteContact(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/contacts/${id}`, { method: 'DELETE', headers: authHeaders() });
+  await checkOk(res, `DELETE /api/contacts/${id}`);
+}

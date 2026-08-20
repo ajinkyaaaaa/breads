@@ -1,4 +1,4 @@
-import type { ApiCommodity, ApiHistoryRow, ApiPriceRow } from './api';
+import type { ApiCommodity, ApiPriceRow } from './api';
 import type { Freshness, Mandi, Metric } from '../data/types';
 
 /** Curated per-commodity lot size isn't sourced from the API (no arrival-quantity field exists) -- used until a commodity gets a curated default_lot_quintals value. */
@@ -271,58 +271,3 @@ export function getFreshMarketIds(pricesByCommodity: Record<string, ApiPriceRow[
   return ids;
 }
 
-export interface DailyBreakdownRow {
-  date: string;
-  avgPrice: number | null;
-  low: number | null;
-  high: number | null;
-  mandisReporting: number;
-}
-
-/** Day-by-day breakdown for a commodity from its raw archive history -- as
- * many days as the archive actually has (grows over time; there's no way to
- * backfill from the live API). */
-export function getCommodityDailyBreakdown(
-  history: ApiHistoryRow[],
-  mandiByMarketId: Map<string, Mandi>,
-  visibleMandiCodes: Set<string>,
-  dates: string[],
-  metric: Metric,
-): DailyBreakdownRow[] {
-  const field = metric === 'min' ? 'min_price_normalized' : metric === 'max' ? 'max_price_normalized' : 'modal_price_normalized';
-
-  const byDate = new Map<string, ApiHistoryRow[]>();
-  for (const row of history) {
-    const mandi = mandiByMarketId.get(String(row.market_id));
-    if (!mandi || !visibleMandiCodes.has(mandi.code)) continue;
-    const list = byDate.get(row.arrival_date) ?? [];
-    list.push(row);
-    byDate.set(row.arrival_date, list);
-  }
-
-  return dates.map((date) => {
-    const rows = byDate.get(date) ?? [];
-    if (!rows.length) return { date, avgPrice: null, low: null, high: null, mandisReporting: 0 };
-
-    const byMarket = new Map<number, number[]>();
-    for (const row of rows) {
-      const list = byMarket.get(row.market_id) ?? [];
-      list.push(row[field]);
-      byMarket.set(row.market_id, list);
-    }
-    const marketPrices = Array.from(byMarket.values()).map((values) => values.reduce((a, b) => a + b, 0) / values.length);
-    const avgPrice = marketPrices.reduce((a, b) => a + b, 0) / marketPrices.length;
-
-    return {
-      date,
-      avgPrice,
-      low: Math.min(...marketPrices),
-      high: Math.max(...marketPrices),
-      mandisReporting: byMarket.size,
-    };
-  });
-}
-
-export function getCommodityAvgPriceTrend(breakdown: DailyBreakdownRow[]): (number | null)[] {
-  return breakdown.map((r) => r.avgPrice);
-}

@@ -1,6 +1,11 @@
 .leaflet-container {
   background: #12140f;
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  /* Leaflet's own controls/panes use z-index up to 1000, which otherwise
+     escapes past this container and floats above modals (e.g. the Locations
+     editor at z-30) that sit later in the page's stacking order. Isolating
+     contains all of Leaflet's internal z-index values to this box alone. */
+  isolation: isolate;
 }
 
 .leaflet-control-zoom a {

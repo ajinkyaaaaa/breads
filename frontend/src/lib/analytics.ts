@@ -61,7 +61,7 @@ function freshnessFromDate(asOfDate: string | null, requestedAsOf: string): Fres
   return 'old';
 }
 
-function collapseMarketPrices(
+export function collapseMarketPrices(
   rows: ApiPriceRow[],
   metric: Metric,
   requestedAsOf: string,
@@ -258,6 +258,56 @@ export function getMarketStats(
     mandisReporting,
     totalMandis: visibleMandiCodes.size,
   };
+}
+
+export interface ReturnLegCandidate {
+  commodityId: string;
+  commodityName: string;
+  commodityNameHi?: string;
+  /** Price at the return leg's buy market (the outbound trip's Point B). */
+  buyPrice: number;
+  /** Price at the return leg's sell market (the outbound trip's Point A). */
+  sellPrice: number;
+  spread: number;
+  spreadPct: number;
+  lotProfit: number;
+}
+
+/** Every commodity that both `buyMarketId` and `sellMarketId` reported a
+ * price for on `asOf`, ranked by lot profit (buying at `buyMarketId`,
+ * selling at `sellMarketId`) -- descending, negative spreads included, so a
+ * "best available" option always surfaces even when nothing is profitable.
+ * Used by the trip explorer to suggest a return-leg commodity for the trip
+ * back from the outbound sell market to the outbound buy market. */
+export function getReturnLegCandidates(
+  commodities: ReturnType<typeof toCommodity>[],
+  pricesByCommodity: Record<string, ApiPriceRow[]>,
+  metric: Metric,
+  asOf: string,
+  buyMarketId: number,
+  sellMarketId: number,
+  qty: number,
+): ReturnLegCandidate[] {
+  const results: ReturnLegCandidate[] = [];
+  for (const commodity of commodities) {
+    const rows = pricesByCommodity[commodity.id] ?? [];
+    const collapsed = collapseMarketPrices(rows, metric, asOf);
+    const buyEntry = collapsed.get(buyMarketId);
+    const sellEntry = collapsed.get(sellMarketId);
+    if (!buyEntry || !sellEntry) continue;
+    const spread = sellEntry.price - buyEntry.price;
+    results.push({
+      commodityId: commodity.id,
+      commodityName: commodity.name,
+      commodityNameHi: commodity.nameHi,
+      buyPrice: buyEntry.price,
+      sellPrice: sellEntry.price,
+      spread,
+      spreadPct: buyEntry.price > 0 ? (spread / buyEntry.price) * 100 : 0,
+      lotProfit: spread * qty,
+    });
+  }
+  return results.sort((a, b) => b.lotProfit - a.lotProfit);
 }
 
 /** market_ids with at least one 'fresh' (reported today) price row, across every commodity. */

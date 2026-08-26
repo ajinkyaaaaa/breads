@@ -1,6 +1,11 @@
-import { formatOrdinalDayMonth, formatSyncedAt, formatWeekdayShort, todayIso } from '../lib/format';
+import { useMemo } from 'react';
+import { formatOrdinalDayMonth, formatSyncedAt } from '../lib/format';
 import { Icon } from './Icon';
+import { FilterDropdown } from './FilterDropdown';
+import { MultiSelectDropdown } from './MultiSelectDropdown';
+import { DateNavigator } from './DateNavigator';
 import aarhatLogo from '../assets/aarhat-logo.png';
+import type { Mandi } from '../data/types';
 
 interface MastheadProps {
   /** Every date the archive has data for, ascending. Grows by one each day the ingest pipeline runs. */
@@ -15,7 +20,12 @@ interface MastheadProps {
   syncing: boolean;
   onRefresh: () => void;
   onLogout: () => void;
+  mandis: Mandi[];
+  selectedDistricts: string[];
+  onDistrictsChange: (districts: string[]) => void;
 }
+
+const STATE_OPTIONS = [{ value: 'Maharashtra', label: 'Maharashtra' }];
 
 export function Masthead({
   dates,
@@ -27,34 +37,43 @@ export function Masthead({
   syncing,
   onRefresh,
   onLogout,
+  mandis,
+  selectedDistricts,
+  onDistrictsChange,
 }: MastheadProps) {
   const latestArchivedDate = dates[dates.length - 1] ?? null;
 
-  // The date navigator can always reach today, even before the pipeline has
-  // ingested anything for it yet -- landing there shows the dashboard's
-  // regular empty state rather than being unreachable.
-  const today = todayIso();
-  const navigableDates = dates.includes(today) ? dates : [...dates, today];
-
-  const index = asOf ? navigableDates.indexOf(asOf) : -1;
-  const atEarliest = index <= 0;
-  const atLatest = index === -1 || index >= navigableDates.length - 1;
-
-  function step(delta: number) {
-    const next = navigableDates[index + delta];
-    if (next) onAsOfChange(next);
-  }
+  const districtOptions = useMemo(
+    () => Array.from(new Set(mandis.map((m) => m.taluka))).sort().map((d) => ({ value: d, label: d })),
+    [mandis],
+  );
 
   return (
     <header className="flex flex-wrap items-center justify-between gap-y-2 border-b border-wheat/10 bg-ink px-4 py-2">
-      <div className="flex items-center gap-3">
-        <img src={aarhatLogo} alt="Aarhat" className="h-9 w-auto lg:h-11" />
+      <div className="flex min-w-0 items-center gap-3">
+        <img src={aarhatLogo} alt="Aarhat" className="h-9 w-auto shrink-0 lg:h-11" />
         <span className="font-display text-xl font-semibold text-amber">आढत</span>
-        <div className="ml-2 h-6 w-px bg-wheat/15" />
-        <div className="flex items-baseline gap-2">
-          <span className="font-display text-lg font-bold uppercase tracking-tight text-wheat">Mandi</span>
-          <span className="font-display text-lg font-bold uppercase tracking-tight text-amber">// Maharashtra</span>
-        </div>
+        <div className="ml-2 h-6 w-px shrink-0 bg-wheat/15" />
+        <span className="shrink-0 font-display text-lg font-bold uppercase tracking-tight text-wheat">Mandi</span>
+
+        <FilterDropdown
+          options={STATE_OPTIONS}
+          value="Maharashtra"
+          onChange={() => {}}
+          searchPlaceholder="Search state…"
+          buttonContent={<span className="font-display text-lg font-bold uppercase tracking-tight text-amber">// Maharashtra</span>}
+          buttonClassName="flex items-center gap-1 transition-opacity duration-150 hover:opacity-80"
+          panelWidthClassName="w-56"
+        />
+
+        <MultiSelectDropdown
+          options={districtOptions}
+          selected={selectedDistricts}
+          onChange={onDistrictsChange}
+          searchPlaceholder="Search district…"
+          emptyLabel="All Districts"
+          panelWidthClassName="w-72"
+        />
       </div>
       <div className="flex flex-wrap items-center justify-end gap-3 gap-y-2">
         <button
@@ -96,28 +115,7 @@ export function Masthead({
           />
         </button>
 
-        <div className="flex items-center gap-0.5 rounded-full bg-amber py-1 pl-1.5 pr-1 shadow-[0_0_0_1px_rgba(232,163,61,0.3),0_2px_8px_rgba(232,163,61,0.35)]">
-          <button
-            onClick={() => step(-1)}
-            disabled={atEarliest}
-            className="flex h-5 w-5 items-center justify-center rounded-full text-ink/60 transition-colors duration-150 hover:text-ink disabled:opacity-30 disabled:hover:text-ink/60"
-            aria-label="Previous day"
-          >
-            <Icon name="chevron_left" size={15} />
-          </button>
-          <div className="flex items-center gap-1.5 px-0.5 font-mono text-[13px] font-semibold tabular-nums text-ink">
-            <Icon name="calendar_today" size={13} className="text-ink/70" />
-            <span>{asOf ? `${formatWeekdayShort(asOf)}, ${formatOrdinalDayMonth(asOf)}` : '—'}</span>
-          </div>
-          <button
-            onClick={() => step(1)}
-            disabled={atLatest}
-            className="flex h-5 w-5 items-center justify-center rounded-full text-ink/60 transition-colors duration-150 hover:text-ink disabled:opacity-30 disabled:hover:text-ink/60"
-            aria-label="Next day"
-          >
-            <Icon name="chevron_right" size={15} />
-          </button>
-        </div>
+        <DateNavigator dates={dates} asOf={asOf} onAsOfChange={onAsOfChange} />
 
         <button
           onClick={onLogout}

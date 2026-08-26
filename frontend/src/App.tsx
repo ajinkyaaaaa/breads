@@ -59,6 +59,9 @@ export default function App() {
   const [requireGeocoded, setRequireGeocoded] = useState(false);
   const [tierByCommodity, setTierByCommodity] = useState<Record<string, number>>({});
   const [visibleMandiCodes, setVisibleMandiCodes] = useState<Set<string>>(new Set());
+  // Region filter (masthead): narrow the whole dashboard down to one or more
+  // districts, on top of the Toolbar's per-mandi visibility toggles. Empty = no filter.
+  const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
 
   const [pricesByCommodity, setPricesByCommodity] = useState<Record<string, ApiPriceRow[]>>({});
 
@@ -158,16 +161,39 @@ export default function App() {
 
   const mandiByMarketId = useMemo(() => new Map(mandis.map((m) => [m.code, m])), [mandis]);
 
+  // No districts picked applies no extra narrowing beyond the Toolbar's own
+  // visibility toggles; one or more picked narrows to every mandi across them.
+  const regionMandiCodes = useMemo(() => {
+    if (selectedDistricts.length === 0) return null;
+    return new Set(mandis.filter((m) => selectedDistricts.includes(m.taluka)).map((m) => m.code));
+  }, [mandis, selectedDistricts]);
+
+  const effectiveVisibleMandiCodes = useMemo(() => {
+    if (!regionMandiCodes) return visibleMandiCodes;
+    const next = new Set<string>();
+    for (const code of visibleMandiCodes) if (regionMandiCodes.has(code)) next.add(code);
+    return next;
+  }, [visibleMandiCodes, regionMandiCodes]);
+
   const rows = useMemo(
-    () => getCommoditySpreadRows(commodities, mandiByMarketId, pricesByCommodity, metric, visibleMandiCodes, asOf ?? '', requireGeocoded),
-    [commodities, mandiByMarketId, pricesByCommodity, metric, visibleMandiCodes, asOf, requireGeocoded],
+    () =>
+      getCommoditySpreadRows(
+        commodities,
+        mandiByMarketId,
+        pricesByCommodity,
+        metric,
+        effectiveVisibleMandiCodes,
+        asOf ?? '',
+        requireGeocoded,
+      ),
+    [commodities, mandiByMarketId, pricesByCommodity, metric, effectiveVisibleMandiCodes, asOf, requireGeocoded],
   );
 
   const freshMarketIds = useMemo(() => getFreshMarketIds(pricesByCommodity), [pricesByCommodity]);
 
   const stats = useMemo(
-    () => getMarketStats(rows, undefined, freshMarketIds, visibleMandiCodes, commodities.length),
-    [rows, freshMarketIds, visibleMandiCodes, commodities.length],
+    () => getMarketStats(rows, undefined, freshMarketIds, effectiveVisibleMandiCodes, commodities.length),
+    [rows, freshMarketIds, effectiveVisibleMandiCodes, commodities.length],
   );
 
   useEffect(() => {
@@ -224,6 +250,31 @@ export default function App() {
     if (rows[0]) setSelectedCommodityId(rows[0].commodityId);
   }
 
+  // Opens the standalone trip-explorer page in a new tab, carrying over
+  // exactly what's on screen (the resolved buy/sell pair, not a commodity id
+  // to re-rank) so the new tab shows precisely the trip the card displayed,
+  // regardless of region filters or mandi visibility toggles in this tab.
+  function handleExplore(row: CommoditySpreadRow, tierIndex: number) {
+    const tier = row.tiers[Math.min(tierIndex, row.tiers.length - 1)];
+    const params = new URLSearchParams({
+      commodityId: row.commodityId,
+      commodityName: row.commodityName,
+      unit: row.unit,
+      pointA: tier.buy.mandi.code,
+      pointB: tier.sell.mandi.code,
+      buyPrice: String(tier.buy.price),
+      sellPrice: String(tier.sell.price),
+      qty: String(row.lotQuantity),
+      asOf: asOf ?? '',
+      windowDays: String(windowDays),
+      metric,
+      priceUnit,
+      transportRate: String(transportRate),
+    });
+    if (row.commodityNameHi) params.set('commodityNameHi', row.commodityNameHi);
+    window.open(`/explore?${params.toString()}`, '_blank');
+  }
+
   if (!isAuthenticated) {
     return <LoginScreen onSuccess={() => setIsAuthenticated(true)} />;
   }
@@ -254,6 +305,9 @@ export default function App() {
         syncing={syncing}
         onRefresh={handleRefresh}
         onLogout={handleLogout}
+        mandis={mandis}
+        selectedDistricts={selectedDistricts}
+        onDistrictsChange={setSelectedDistricts}
       />
       <Toolbar
         mandis={mandis}
@@ -283,6 +337,7 @@ export default function App() {
           onTopNChange={setTopN}
           tierByCommodity={tierByCommodity}
           onTierChange={handleTierChange}
+          onExplore={handleExplore}
         />
       </div>
 

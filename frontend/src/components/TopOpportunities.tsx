@@ -36,6 +36,8 @@ interface TopOpportunitiesProps {
   onTopNChange: (n: number) => void;
   tierByCommodity: Record<string, number>;
   onTierChange: (commodityId: string, tierIndex: number) => void;
+  /** Opens the full trip plan (with a suggested return leg) in a new browser tab. */
+  onExplore: (row: CommoditySpreadRow, tierIndex: number) => void;
 }
 
 function MandiLine({ point, priceUnit }: { point: SpreadPoint; priceUnit: PriceUnit }) {
@@ -63,6 +65,7 @@ export function TopOpportunities({
   onTopNChange,
   tierByCommodity,
   onTierChange,
+  onExplore,
 }: TopOpportunitiesProps) {
   const topRows = rows.slice(0, topN);
   // At the default of 5, cards stretch to divide the row evenly (matches the
@@ -124,11 +127,21 @@ export function TopOpportunities({
                     )}
                     <span className="truncate font-display text-[15px] font-semibold text-wheat">{row.commodityName}</span>
                   </div>
-                  <TierDropdown
-                    tierCount={row.tiers.length}
-                    value={tierIndex}
-                    onChange={(idx) => onTierChange(row.commodityId, idx)}
-                  />
+                  <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    <TierDropdown
+                      tierCount={row.tiers.length}
+                      value={tierIndex}
+                      onChange={(idx) => onTierChange(row.commodityId, idx)}
+                    />
+                    <button
+                      onClick={() => onExplore(row, tierIndex)}
+                      title="Open a full trip plan, with a suggested return leg, in a new tab"
+                      className="flex items-center gap-1 rounded-sm border border-wheat/15 bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-wheat transition-colors duration-150 hover:border-amber/40 hover:text-amber"
+                    >
+                      Explore
+                      <Icon name="open_in_new" size={11} />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mt-2.5 border-t border-dashed border-wheat/15" />

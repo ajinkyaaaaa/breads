@@ -13,6 +13,12 @@ interface RouteJourneyProps {
   priceUnit: PriceUnit;
   transportRate: number;
   onTransportRateChange: (rate: number) => void;
+  /** Controlled quantity -- when both are provided, the component defers to
+   * the parent instead of managing its own qty state. Used by the trip
+   * explorer to keep a round trip's outbound and return legs locked to the
+   * same truck load rather than letting them drift independently. */
+  quantity?: number;
+  onQuantityChange?: (q: number) => void;
 }
 
 const AVG_SPEED_KMPH = 35;
@@ -23,6 +29,9 @@ const QUINTAL_STEP = 5;
 const MIN_RATE = 0.1;
 const MAX_RATE = 10;
 const RATE_STEP = 0.1;
+
+type RateUnit = 'km' | 'qtlkm';
+const RATE_UNIT_SUFFIX: Record<RateUnit, string> = { km: '/km', qtlkm: '/qtl/km' };
 
 function clampQuintals(n: number): number {
   if (Number.isNaN(n)) return MIN_QUINTALS;
@@ -59,10 +68,22 @@ function SummaryField({ label, value, valueClassName = 'text-wheat' }: { label: 
   );
 }
 
-/** Editable ₹/qtl·km freight rate -- stepper buttons plus a real text field for
- * typing an exact value, same interaction pattern as the Qty control on each
- * PointCard, just sized up since this is the number that drives the whole bill. */
-function TransportRateField({ value, onChange }: { value: number; onChange: (rate: number) => void }) {
+/** Editable freight rate -- stepper buttons plus a real text field for typing
+ * an exact value, same interaction pattern as the Qty control on each
+ * PointCard, just sized up since this is the number that drives the whole bill.
+ * The unit suffix (₹/km vs ₹/qtl/km) is purely a display choice -- the rate
+ * value and every downstream calculation are unaffected either way. */
+function TransportRateField({
+  value,
+  onChange,
+  unit,
+  onUnitChange,
+}: {
+  value: number;
+  onChange: (rate: number) => void;
+  unit: RateUnit;
+  onUnitChange: (unit: RateUnit) => void;
+}) {
   const [raw, setRaw] = useState(String(value));
   useEffect(() => {
     setRaw(String(value));
@@ -104,7 +125,6 @@ function TransportRateField({ value, onChange }: { value: number; onChange: (rat
             }}
             className="w-14 rounded-sm border border-wheat/15 bg-ink px-1.5 py-1 text-center font-mono text-[15px] font-semibold tabular-nums text-wheat outline-none focus:border-amber"
           />
-          <span className="text-[11px] text-dim">/qtl·km</span>
         </div>
         <button
           onClick={() => onChange(clampRate(value + RATE_STEP))}
@@ -113,6 +133,20 @@ function TransportRateField({ value, onChange }: { value: number; onChange: (rat
         >
           <Icon name="add" size={13} />
         </button>
+        <div className="flex shrink-0 gap-0.5 rounded-sm bg-ink p-0.5">
+          {(['km', 'qtlkm'] as const).map((u) => (
+            <button
+              key={u}
+              onClick={() => onUnitChange(u)}
+              title="Display unit only -- doesn't change the rate or any calculation"
+              className={`rounded-sm px-1.5 py-0.5 text-[10px] font-medium transition-colors duration-150 ${
+                u === unit ? 'bg-surface2 text-wheat' : 'text-dim hover:text-wheat'
+              }`}
+            >
+              ₹{RATE_UNIT_SUFFIX[u]}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -262,8 +296,19 @@ function PointCard({
   );
 }
 
-export function RouteJourney({ row, tierIndex, priceUnit, transportRate, onTransportRateChange }: RouteJourneyProps) {
-  const [quantity, setQuantity] = useState(row.lotQuantity);
+export function RouteJourney({
+  row,
+  tierIndex,
+  priceUnit,
+  transportRate,
+  onTransportRateChange,
+  quantity: quantityProp,
+  onQuantityChange: onQuantityChangeProp,
+}: RouteJourneyProps) {
+  const [internalQuantity, setInternalQuantity] = useState(row.lotQuantity);
+  const quantity = quantityProp ?? internalQuantity;
+  const setQuantity = onQuantityChangeProp ?? setInternalQuantity;
+  const [rateUnit, setRateUnit] = useState<RateUnit>('km');
 
   const tier = row.tiers[Math.min(tierIndex, row.tiers.length - 1)];
   const buyPrice = tier.buy.price;
@@ -345,7 +390,9 @@ export function RouteJourney({ row, tierIndex, priceUnit, transportRate, onTrans
             {distanceKm !== null && travelTime !== null && (
               <SummaryField label="Distance" value={`${formatKm(distanceKm)} · ~${formatTravelTime(travelTime)}`} />
             )}
-            {distanceKm !== null && <TransportRateField value={transportRate} onChange={onTransportRateChange} />}
+            {distanceKm !== null && (
+              <TransportRateField value={transportRate} onChange={onTransportRateChange} unit={rateUnit} onUnitChange={setRateUnit} />
+            )}
             <SummaryField label="Margin" value={formatPct(marginPct)} valueClassName={marginPct >= 0 ? 'text-sage' : 'text-rust'} />
           </div>
         </div>
@@ -369,7 +416,7 @@ export function RouteJourney({ row, tierIndex, priceUnit, transportRate, onTrans
           {distanceKm !== null && (
             <BillRow
               description="Transport"
-              sub={`${formatKm(distanceKm)} @ ₹${transportRate.toFixed(2)}/qtl·km`}
+              sub={`${formatKm(distanceKm)} @ ₹${transportRate.toFixed(2)}${RATE_UNIT_SUFFIX[rateUnit]}`}
               amount={`+${formatRupees(transportCost)}`}
               amountClassName="text-wheat"
             />

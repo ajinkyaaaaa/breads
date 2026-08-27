@@ -37,7 +37,7 @@ interface TopOpportunitiesProps {
   tierByCommodity: Record<string, number>;
   onTierChange: (commodityId: string, tierIndex: number) => void;
   /** Opens the full trip plan (with a suggested return leg) in a new browser tab. */
-  onExplore: (row: CommoditySpreadRow, tierIndex: number) => void;
+  onExplore: (row: CommoditySpreadRow, tierIndex: number, rank: number) => void;
 }
 
 function MandiLine({ point, priceUnit }: { point: SpreadPoint; priceUnit: PriceUnit }) {
@@ -134,7 +134,7 @@ export function TopOpportunities({
                       onChange={(idx) => onTierChange(row.commodityId, idx)}
                     />
                     <button
-                      onClick={() => onExplore(row, tierIndex)}
+                      onClick={() => onExplore(row, tierIndex, i + 1)}
                       title="Open a full trip plan, with a suggested return leg, in a new tab"
                       className="flex items-center gap-1 rounded-sm border border-wheat/15 bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-wheat transition-colors duration-150 hover:border-amber/40 hover:text-amber"
                     >

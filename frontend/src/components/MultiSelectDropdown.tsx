@@ -80,7 +80,7 @@ export function MultiSelectDropdown({
       <button
         ref={buttonRef}
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1 rounded-sm border border-wheat/15 bg-surface px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-white transition-colors duration-150 hover:border-wheat/30 hover:bg-surface2"
+        className="flex items-center gap-1 rounded-sm border border-wheat/15 bg-surface px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-wheat transition-colors duration-150 hover:border-wheat/30 hover:bg-surface2"
       >
         <span className="max-w-[130px] truncate normal-case">{buttonLabel}</span>
         <Icon name="expand_more" size={13} className={`shrink-0 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
@@ -98,7 +98,7 @@ export function MultiSelectDropdown({
                 {selected.map((v) => (
                   <span
                     key={v}
-                    className="flex items-center gap-1 rounded-full border border-amber/30 bg-amber/10 px-2 py-0.5 text-[11px] text-white"
+                    className="flex items-center gap-1 rounded-full border border-amber/30 bg-amber/10 px-2 py-0.5 text-[11px] text-wheat"
                   >
                     {labelByValue.get(v) ?? v}
                     <button
@@ -122,7 +122,7 @@ export function MultiSelectDropdown({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="min-w-0 flex-1 bg-transparent text-[12px] text-white outline-none placeholder:text-dim"
+                className="min-w-0 flex-1 bg-transparent text-[12px] text-wheat outline-none placeholder:text-dim"
               />
             </div>
 
@@ -135,7 +135,7 @@ export function MultiSelectDropdown({
                   return (
                     <label
                       key={o.value}
-                      className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-[12px] text-white transition-colors duration-150 hover:bg-surface"
+                      className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-[12px] text-wheat transition-colors duration-150 hover:bg-surface"
                     >
                       <input type="checkbox" checked={active} onChange={() => toggle(o.value)} className="h-3.5 w-3.5 accent-amber" />
                       <span className={`truncate ${active ? 'font-semibold' : ''}`}>{o.label}</span>

@@ -4,6 +4,7 @@ import { Icon } from './Icon';
 import { FilterDropdown } from './FilterDropdown';
 import { MultiSelectDropdown } from './MultiSelectDropdown';
 import { DateNavigator } from './DateNavigator';
+import { ThemeToggle } from './ThemeToggle';
 import aarhatLogo from '../assets/aarhat-logo.png';
 import type { Mandi } from '../data/types';
 
@@ -116,6 +117,8 @@ export function Masthead({
         </button>
 
         <DateNavigator dates={dates} asOf={asOf} onAsOfChange={onAsOfChange} />
+
+        <ThemeToggle />
 
         <button
           onClick={onLogout}

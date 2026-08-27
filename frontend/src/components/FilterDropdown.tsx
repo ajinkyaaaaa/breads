@@ -93,7 +93,7 @@ export function FilterDropdown({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="min-w-0 flex-1 bg-transparent text-[12px] text-white outline-none placeholder:text-dim"
+                className="min-w-0 flex-1 bg-transparent text-[12px] text-wheat outline-none placeholder:text-dim"
               />
             </div>
             <div className="flex-1 overflow-y-auto py-1">
@@ -106,7 +106,7 @@ export function FilterDropdown({
                     <button
                       key={o.value}
                       onClick={() => handleSelect(o.value)}
-                      className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-[12px] text-white transition-colors duration-150 hover:bg-surface ${
+                      className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-[12px] text-wheat transition-colors duration-150 hover:bg-surface ${
                         active ? 'font-semibold' : ''
                       }`}
                     >

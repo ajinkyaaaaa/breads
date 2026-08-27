@@ -4,22 +4,26 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: '#12140F',
-        surface: '#1B1D16',
-        surface2: '#242619',
-        wheat: '#D9CFB8',
-        dim: '#8C8570',
+        // Each references a CSS variable holding "R G B" (see global.css) so
+        // Tailwind's opacity modifiers (bg-ink/50, border-wheat/10, etc.)
+        // keep working, and so a [data-theme="light"] attribute on <html>
+        // can repaint every one of these at once without per-component changes.
+        ink: 'rgb(var(--color-ink) / <alpha-value>)',
+        surface: 'rgb(var(--color-surface) / <alpha-value>)',
+        surface2: 'rgb(var(--color-surface2) / <alpha-value>)',
+        wheat: 'rgb(var(--color-wheat) / <alpha-value>)',
+        dim: 'rgb(var(--color-dim) / <alpha-value>)',
         amber: {
-          DEFAULT: '#E8A33D',
-          dim: 'rgba(232,163,61,0.14)',
+          DEFAULT: 'rgb(var(--color-amber) / <alpha-value>)',
+          dim: 'rgb(var(--color-amber) / 0.14)',
         },
         rust: {
-          DEFAULT: '#C1502E',
-          dim: 'rgba(193,80,46,0.16)',
+          DEFAULT: 'rgb(var(--color-rust) / <alpha-value>)',
+          dim: 'rgb(var(--color-rust) / 0.16)',
         },
         sage: {
-          DEFAULT: '#7A9B76',
-          dim: 'rgba(122,155,118,0.16)',
+          DEFAULT: 'rgb(var(--color-sage) / <alpha-value>)',
+          dim: 'rgb(var(--color-sage) / 0.16)',
         },
       },
       fontFamily: {

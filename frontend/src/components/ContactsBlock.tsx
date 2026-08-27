@@ -100,7 +100,7 @@ export function ContactsBlock({ point, mandi, onNotify }: ContactsBlockProps) {
     }
   }
 
-  const accentText = point === 'A' ? 'text-white' : 'text-sage';
+  const accentText = point === 'A' ? 'text-wheat' : 'text-sage';
 
   return (
     <div>

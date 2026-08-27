@@ -16,6 +16,7 @@ import { Icon } from './components/Icon';
 import { MandiInfoPanel } from './components/MandiInfoPanel';
 import { RouteJourney } from './components/RouteJourney';
 import { FilterDropdown } from './components/FilterDropdown';
+import { ThemeToggle } from './components/ThemeToggle';
 import type { Mandi, PriceUnit } from './data/types';
 import aarhatLogo from './assets/aarhat-logo.png';
 
@@ -297,23 +298,29 @@ export function TripExplorer() {
             </div>
           </div>
         </div>
-        <button
-          onClick={() => window.close()}
-          className="flex items-center gap-1.5 rounded-sm border border-wheat/15 bg-surface px-2.5 py-1 text-[12px] font-medium uppercase tracking-wide text-wheat transition-colors duration-150 hover:border-rust/40 hover:text-rust"
-        >
-          <Icon name="close" size={14} />
-          Close
-        </button>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <button
+            onClick={() => window.close()}
+            className="flex items-center gap-1.5 rounded-sm border border-wheat/15 bg-surface px-2.5 py-1 text-[12px] font-medium uppercase tracking-wide text-wheat transition-colors duration-150 hover:border-rust/40 hover:text-rust"
+          >
+            <Icon name="close" size={14} />
+            Close
+          </button>
+        </div>
       </header>
 
-      <div className="border-b border-wheat/10 px-6 py-4">
-        <div className="mb-2.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-dim">P&amp;L Overview</div>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <OverviewKpi label="Outbound Net" value={formatRupees(outNet)} tone={outNet >= 0 ? 'sage' : 'rust'} />
-          <OverviewKpi label="Return Net" value={formatRupees(retNet)} tone={retNet >= 0 ? 'sage' : 'rust'} />
-          <OverviewKpi label="Round Trip Distance" value={dist !== null ? formatKm(dist * 2) : 'Unmapped'} tone="wheat" />
-          <OverviewKpi label="Net Round-Trip Profit" value={formatRupees(netRoundTrip)} tone={netRoundTrip >= 0 ? 'sage' : 'rust'} big />
+      <div className="flex w-full items-stretch overflow-x-auto border-b border-wheat/10 bg-ink">
+        <div className="flex shrink-0 items-center border-r border-wheat/10 px-4 py-2">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-dim">P&amp;L
+            <br />
+            Overview
+          </span>
         </div>
+        <OverviewKpi label="Outbound Net" value={formatRupees(outNet)} tone={outNet >= 0 ? 'sage' : 'rust'} />
+        <OverviewKpi label="Return Net" value={formatRupees(retNet)} tone={retNet >= 0 ? 'sage' : 'rust'} />
+        <OverviewKpi label="Round Trip Distance" value={dist !== null ? formatKm(dist * 2) : 'Unmapped'} tone="wheat" />
+        <OverviewKpi label="Net Round-Trip Profit" value={formatRupees(netRoundTrip)} tone={netRoundTrip >= 0 ? 'sage' : 'rust'} big />
       </div>
 
       <div className="grid grid-cols-1 divide-wheat/10 lg:grid-cols-2 lg:divide-x">
@@ -416,6 +423,11 @@ export function TripExplorer() {
   );
 }
 
+const KPI_GLOW: Record<'sage' | 'rust', string> = {
+  sage: 'drop-shadow(0 0 6px rgba(122,155,118,0.65))',
+  rust: 'drop-shadow(0 0 6px rgba(193,80,46,0.65))',
+};
+
 function OverviewKpi({
   label,
   value,
@@ -429,9 +441,14 @@ function OverviewKpi({
 }) {
   const colorClass = tone === 'sage' ? 'text-sage' : tone === 'rust' ? 'text-rust' : 'text-wheat';
   return (
-    <div>
-      <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-dim">{label}</div>
-      <div className={`mt-1 font-mono font-bold tabular-nums ${big ? 'text-2xl' : 'text-xl'} ${colorClass}`}>{value}</div>
+    <div className="shrink-0 border-r border-wheat/10 px-4 py-2 last:border-r-0">
+      <div className="text-[9px] font-medium uppercase tracking-[0.1em] text-dim">{label}</div>
+      <div
+        style={tone !== 'wheat' ? { filter: KPI_GLOW[tone] } : undefined}
+        className={`mt-0.5 font-mono font-bold tabular-nums ${big ? 'text-xl' : 'text-lg'} ${colorClass}`}
+      >
+        {value}
+      </div>
     </div>
   );
 }

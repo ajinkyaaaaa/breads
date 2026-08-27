@@ -122,7 +122,7 @@ export function TopOpportunities({
                     </span>
                     {category && (
                       <span className="shrink-0" title={category}>
-                        <Icon name={CATEGORY_ICON[category]} size={14} filled className="text-white" />
+                        <Icon name={CATEGORY_ICON[category]} size={14} filled className="text-wheat" />
                       </span>
                     )}
                     <span className="truncate font-display text-[15px] font-semibold text-wheat">{row.commodityName}</span>

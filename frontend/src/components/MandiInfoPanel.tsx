@@ -40,7 +40,7 @@ export function MandiInfoPanel({ row, tierIndex }: MandiInfoPanelProps) {
         <div className="flex items-center justify-between px-6 pb-1 pt-4">
           <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-dim">Mandi Locations</div>
           <div className="flex items-center gap-3 text-[10px] font-medium">
-            <span className={hasA ? 'text-white' : 'text-dim'}>Point A {hasA ? '· mapped' : '· not available'}</span>
+            <span className={hasA ? 'text-wheat' : 'text-dim'}>Point A {hasA ? '· mapped' : '· not available'}</span>
             <span className={hasB ? 'text-sage' : 'text-dim'}>Point B {hasB ? '· mapped' : '· not available'}</span>
           </div>
         </div>

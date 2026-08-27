@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { fetchAllPrices, fetchCommodities, fetchMarkets, type ApiPriceRow } from './lib/api';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { fetchAllPrices, fetchCommodities, fetchContacts, fetchMarkets, type ApiPriceRow } from './lib/api';
 import {
   getReturnLegCandidates,
   toCommodity,
@@ -9,7 +9,7 @@ import {
   type SpreadPoint,
   type TierPair,
 } from './lib/analytics';
-import { formatOrdinalDayMonth, formatRupees, formatWeekdayShort } from './lib/format';
+import { formatKm, formatOrdinalDayMonth, formatRupees, formatWeekdayShort } from './lib/format';
 import { haversineKm } from './lib/geo';
 import { getToken } from './lib/auth';
 import { Icon } from './components/Icon';
@@ -34,6 +34,7 @@ interface TripParams {
   metric: 'modal' | 'min' | 'max';
   priceUnit: PriceUnit;
   transportRate: number;
+  rank: number | null;
 }
 
 function parseParams(): TripParams | null {
@@ -50,6 +51,7 @@ function parseParams(): TripParams | null {
   const transportRate = Number(p.get('transportRate'));
   const metric = p.get('metric');
   const priceUnit = p.get('priceUnit');
+  const rankRaw = p.get('rank');
 
   if (
     !commodityId ||
@@ -83,6 +85,7 @@ function parseParams(): TripParams | null {
     metric,
     priceUnit,
     transportRate,
+    rank: rankRaw && !Number.isNaN(Number(rankRaw)) ? Number(rankRaw) : null,
   };
 }
 
@@ -120,6 +123,8 @@ function distanceKm(a: Mandi, b: Mandi): number | null {
   return haversineKm({ lat: a.lat, lon: a.lon }, { lat: b.lat, lon: b.lon });
 }
 
+type LegView = 'billing' | 'route';
+
 export function TripExplorer() {
   const params = useMemo(parseParams, []);
   const [loading, setLoading] = useState(true);
@@ -132,6 +137,12 @@ export function TripExplorer() {
   const [outboundRate, setOutboundRate] = useState(params?.transportRate ?? 0.5);
   const [returnRate, setReturnRate] = useState(params?.transportRate ?? 0.5);
   const [selectedReturnCommodityId, setSelectedReturnCommodityId] = useState<string | null>(null);
+
+  const [outboundView, setOutboundView] = useState<LegView>('billing');
+  const [returnView, setReturnView] = useState<LegView>('billing');
+  // Session-only -- not persisted anywhere, resets if this tab is closed and Explore reopened.
+  const [outboundContactId, setOutboundContactId] = useState<string | null>(null);
+  const [returnContactId, setReturnContactId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!params) {
@@ -265,6 +276,8 @@ export function TripExplorer() {
     );
   }
 
+  const routeView = <MandiInfoPanel row={outboundRow} tierIndex={0} />;
+
   return (
     <div className="min-h-screen bg-ink font-sans text-wheat">
       <header className="flex flex-wrap items-center justify-between gap-y-2 border-b border-wheat/10 bg-ink px-4 py-3">
@@ -272,6 +285,11 @@ export function TripExplorer() {
           <img src={aarhatLogo} alt="Aarhat" className="h-8 w-auto" />
           <span className="font-display text-lg font-semibold text-amber">आढत</span>
           <div className="h-6 w-px bg-wheat/15" />
+          {params.rank !== null && (
+            <span className="rounded-sm border border-amber/30 bg-amber/[0.08] px-2 py-1 font-mono text-[11px] font-bold text-amber">
+              #{String(params.rank).padStart(2, '0')} OPPORTUNITY
+            </span>
+          )}
           <div>
             <div className="font-display text-base font-bold text-wheat">Trip Plan · {outboundRow.commodityName}</div>
             <div className="text-[11px] text-dim">
@@ -288,15 +306,29 @@ export function TripExplorer() {
         </button>
       </header>
 
-      <div className="h-[440px] border-b border-wheat/10">
-        <MandiInfoPanel row={outboundRow} tierIndex={0} />
+      <div className="border-b border-wheat/10 px-6 py-4">
+        <div className="mb-2.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-dim">P&amp;L Overview</div>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <OverviewKpi label="Outbound Net" value={formatRupees(outNet)} tone={outNet >= 0 ? 'sage' : 'rust'} />
+          <OverviewKpi label="Return Net" value={formatRupees(retNet)} tone={retNet >= 0 ? 'sage' : 'rust'} />
+          <OverviewKpi label="Round Trip Distance" value={dist !== null ? formatKm(dist * 2) : 'Unmapped'} tone="wheat" />
+          <OverviewKpi label="Net Round-Trip Profit" value={formatRupees(netRoundTrip)} tone={netRoundTrip >= 0 ? 'sage' : 'rust'} big />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 divide-wheat/10 lg:grid-cols-2 lg:divide-x">
-        <div className="border-b border-wheat/10 lg:border-b-0">
-          <div className="px-6 pt-4 text-[10px] font-semibold uppercase tracking-[0.1em] text-dim">
-            Outbound Leg · {pointA.name} → {pointB.name}
-          </div>
+        <LegPanel
+          title={`Trip ${pointA.name} → ${pointB.name}`}
+          view={outboundView}
+          onViewChange={setOutboundView}
+          route={routeView}
+        >
+          <AssignedContactField
+            pointA={pointA}
+            pointB={pointB}
+            value={outboundContactId}
+            onChange={setOutboundContactId}
+          />
           <RouteJourney
             row={outboundRow}
             tierIndex={0}
@@ -306,36 +338,44 @@ export function TripExplorer() {
             quantity={qty}
             onQuantityChange={setQty}
           />
-        </div>
+        </LegPanel>
 
-        <div>
-          <div className="flex flex-wrap items-center justify-between gap-2 px-6 pt-4">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-dim">
-              Return Leg · {pointB.name} → {pointA.name}
-            </span>
-            {candidateOptions.length > 0 && selectedCandidate && (
+        <LegPanel
+          title={`Trip ${pointB.name} → ${pointA.name}`}
+          view={returnView}
+          onViewChange={setReturnView}
+          route={routeView}
+          headerExtra={
+            candidateOptions.length > 0 &&
+            selectedCandidate && (
               <FilterDropdown
                 options={candidateOptions}
                 value={selectedCandidate.commodityId}
                 onChange={setSelectedReturnCommodityId}
                 searchPlaceholder="Search commodity…"
-                buttonContent={<span className="max-w-[220px] truncate">{selectedCandidate.commodityName}</span>}
+                buttonContent={<span className="max-w-[180px] truncate">{selectedCandidate.commodityName}</span>}
                 buttonClassName="flex items-center gap-1 rounded-sm border border-wheat/15 bg-surface px-2.5 py-1 text-[11px] font-semibold text-wheat transition-colors duration-150 hover:border-wheat/30 hover:bg-surface2"
                 panelWidthClassName="w-80"
               />
-            )}
-          </div>
-
+            )
+          }
+        >
           {returnRow && selectedCandidate ? (
             <>
               {selectedCandidate.lotProfit < 0 && (
-                <div className="mx-6 mt-3 flex items-center gap-1.5 rounded-sm border border-rust/30 bg-rust-dim px-2.5 py-1.5 text-[11px] text-rust">
+                <div className="mb-3 flex items-center gap-1.5 rounded-sm border border-rust/30 bg-rust-dim px-2.5 py-1.5 text-[11px] text-rust">
                   <Icon name="warning" size={13} />
                   {returnCandidates[0]?.lotProfit < 0
                     ? `Best available option is still a loss on this leg — no commodity is currently profitable from ${pointB.name} back to ${pointA.name}.`
                     : `This is a loss-making pick — ${returnCandidates[0].commodityName} would be profitable instead on this leg.`}
                 </div>
               )}
+              <AssignedContactField
+                pointA={pointA}
+                pointB={pointB}
+                value={returnContactId}
+                onChange={setReturnContactId}
+              />
               <RouteJourney
                 row={returnRow}
                 tierIndex={0}
@@ -347,17 +387,17 @@ export function TripExplorer() {
               />
             </>
           ) : (
-            <div className="flex h-40 items-center justify-center px-6 text-center text-sm text-dim">
+            <div className="flex h-40 items-center justify-center text-center text-sm text-dim">
               No commodity data available for a return trip on this day.
             </div>
           )}
-        </div>
+        </LegPanel>
       </div>
 
       <div className="border-t border-wheat/10 px-6 py-5">
         <div className="mb-3 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-dim">
           <Icon name="receipt_long" size={13} />
-          Round Trip P&amp;L
+          Complete Net Bill
         </div>
         <div className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-sm border border-wheat/10 bg-surface px-4 py-3 text-[12px] sm:grid-cols-4">
           <PnlField label="Outbound Net" value={outNet} />
@@ -372,6 +412,129 @@ export function TripExplorer() {
           </span>
         </div>
       </div>
+    </div>
+  );
+}
+
+function OverviewKpi({
+  label,
+  value,
+  tone,
+  big = false,
+}: {
+  label: string;
+  value: string;
+  tone: 'sage' | 'rust' | 'wheat';
+  big?: boolean;
+}) {
+  const colorClass = tone === 'sage' ? 'text-sage' : tone === 'rust' ? 'text-rust' : 'text-wheat';
+  return (
+    <div>
+      <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-dim">{label}</div>
+      <div className={`mt-1 font-mono font-bold tabular-nums ${big ? 'text-2xl' : 'text-xl'} ${colorClass}`}>{value}</div>
+    </div>
+  );
+}
+
+const LEG_VIEW_OPTIONS: { key: LegView; label: string; icon: 'receipt_long' | 'map' }[] = [
+  { key: 'billing', label: 'Billing', icon: 'receipt_long' },
+  { key: 'route', label: 'Route', icon: 'map' },
+];
+
+interface LegPanelProps {
+  title: string;
+  view: LegView;
+  onViewChange: (v: LegView) => void;
+  route: ReactNode;
+  headerExtra?: ReactNode;
+  children: ReactNode;
+}
+
+/** Each leg of the round trip is fully self-contained: its own header, its own
+ * Billing/Route toggle, and either the trade bill or the shared map+contacts
+ * view underneath -- so a viewer can read one leg top to bottom without
+ * needing to cross-reference a shared panel elsewhere on the page. */
+function LegPanel({ title, view, onViewChange, route, headerExtra, children }: LegPanelProps) {
+  return (
+    <div className="border-b border-wheat/10 py-4 lg:border-b-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-6">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-dim">{title}</span>
+        <div className="flex items-center gap-2">
+          {headerExtra}
+          <div className="flex gap-0.5 rounded-sm bg-ink p-0.5">
+            {LEG_VIEW_OPTIONS.map((o) => (
+              <button
+                key={o.key}
+                onClick={() => onViewChange(o.key)}
+                title={o.key === 'billing' ? 'Billing option' : 'Route details'}
+                className={`flex items-center gap-1 rounded-sm px-2 py-1 text-[10px] font-medium transition-colors duration-150 ${
+                  o.key === view ? 'bg-surface2 text-wheat' : 'text-dim hover:text-wheat'
+                }`}
+              >
+                <Icon name={o.icon} size={12} />
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {view === 'billing' ? <div className="px-6 pt-3">{children}</div> : <div className="mt-3 h-[440px]">{route}</div>}
+    </div>
+  );
+}
+
+interface AssignedContactFieldProps {
+  pointA: Mandi;
+  pointB: Mandi;
+  value: string | null;
+  onChange: (v: string | null) => void;
+}
+
+/** Who's handling this leg's transport, picked from either endpoint's saved
+ * contacts. Session-only -- not persisted, refetched each time this field
+ * mounts (i.e. each time the Billing view is switched back to), so a contact
+ * added via the Route view a moment ago shows up here without a page reload. */
+function AssignedContactField({ pointA, pointB, value, onChange }: AssignedContactFieldProps) {
+  const [options, setOptions] = useState<{ value: string; label: string }[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([fetchContacts(Number(pointA.code)), fetchContacts(Number(pointB.code))])
+      .then(([a, b]) => {
+        if (cancelled) return;
+        const combined = [
+          ...a.map((c) => ({ value: String(c.id), label: `${c.name}${c.role ? ` · ${c.role}` : ''} — ${pointA.name}` })),
+          ...b.map((c) => ({ value: String(c.id), label: `${c.name}${c.role ? ` · ${c.role}` : ''} — ${pointB.name}` })),
+        ];
+        setOptions(combined);
+      })
+      .catch(() => {
+        if (!cancelled) setOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pointA.code, pointB.code]);
+
+  const allOptions = [{ value: '', label: 'No one assigned' }, ...(options ?? [])];
+  const selectedLabel = allOptions.find((o) => o.value === (value ?? ''))?.label ?? 'No one assigned';
+
+  return (
+    <div className="mb-3 flex items-center justify-between gap-2 rounded-sm border border-wheat/10 bg-surface px-3 py-2">
+      <span className="flex items-center gap-1.5 text-[11px] text-dim">
+        <Icon name="person" size={13} />
+        Assigned to (transport)
+      </span>
+      <FilterDropdown
+        options={allOptions}
+        value={value ?? ''}
+        onChange={(v) => onChange(v || null)}
+        searchPlaceholder="Search contacts…"
+        buttonContent={<span className="max-w-[180px] truncate">{options === null ? 'Loading…' : selectedLabel}</span>}
+        buttonClassName="flex items-center gap-1 rounded-sm border border-wheat/15 bg-ink px-2 py-1 text-[11px] font-medium text-wheat transition-colors duration-150 hover:border-wheat/30 hover:bg-surface2"
+        panelWidthClassName="w-72"
+      />
     </div>
   );
 }

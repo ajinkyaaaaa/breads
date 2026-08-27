@@ -254,7 +254,7 @@ export default function App() {
   // exactly what's on screen (the resolved buy/sell pair, not a commodity id
   // to re-rank) so the new tab shows precisely the trip the card displayed,
   // regardless of region filters or mandi visibility toggles in this tab.
-  function handleExplore(row: CommoditySpreadRow, tierIndex: number) {
+  function handleExplore(row: CommoditySpreadRow, tierIndex: number, rank: number) {
     const tier = row.tiers[Math.min(tierIndex, row.tiers.length - 1)];
     const params = new URLSearchParams({
       commodityId: row.commodityId,
@@ -270,6 +270,7 @@ export default function App() {
       metric,
       priceUnit,
       transportRate: String(transportRate),
+      rank: String(rank),
     });
     if (row.commodityNameHi) params.set('commodityNameHi', row.commodityNameHi);
     window.open(`/explore?${params.toString()}`, '_blank');
